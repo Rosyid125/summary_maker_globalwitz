@@ -109,7 +109,7 @@ async function main() {
       sheetOverallMonthlyTotals.forEach((total) => {
         totalAllMoRow.push(total, null);
       });
-      totalAllMoRow.push(grandTotalAllSuppliers, null, null); // REVISI: Nilai total di sel pertama area merge RECAP
+      totalAllMoRow.push(grandTotalAllSuppliers, null, null);
       allRowsForThisSheetContent.push(totalAllMoRow);
 
       const quarterlyTotalsAll = [0, 0, 0, 0];
@@ -128,11 +128,15 @@ async function main() {
       allRowsForThisSheetContent.push(totalAllQuartalRow);
 
       allRowsForThisSheetContent.push([]);
-      const itemTableHeaderRow1 = ["TOTAL PER ITEM", null, null, null, null];
-      MONTH_ORDER.forEach((m) => itemTableHeaderRow1.push(m, null));
-      itemTableHeaderRow1.push("RECAP", null, null);
-      allRowsForThisSheetContent.push(itemTableHeaderRow1);
-      // Baris header kedua untuk TOTAL PER ITEM DIHAPUS sesuai permintaan
+      // Baris Judul Utama untuk Tabel "TOTAL PER ITEM"
+      const itemTableMainTitleRow = ["TOTAL PER ITEM"]; // Hanya satu sel untuk di-merge full
+      allRowsForThisSheetContent.push(itemTableMainTitleRow);
+
+      // Baris Header Bulan untuk Tabel "TOTAL PER ITEM"
+      const itemTableHeaderMonthRow = ["Month", null, null, null, null];
+      MONTH_ORDER.forEach((m) => itemTableHeaderMonthRow.push(m, null));
+      itemTableHeaderMonthRow.push("RECAP", null, null);
+      allRowsForThisSheetContent.push(itemTableHeaderMonthRow);
 
       Object.keys(itemSummaryDataForSheet)
         .sort()
@@ -140,7 +144,7 @@ async function main() {
           const itemData = itemSummaryDataForSheet[itemKey];
           const itemRow = [`${itemData.item} ${itemData.gsm} ${itemData.addOn}`, null, null, null, null];
           itemData.monthlyQtys.forEach((qty) => itemRow.push(qty, null));
-          itemRow.push(itemData.totalQtyRecap, null, null); // REVISI: Nilai total di sel pertama area merge RECAP
+          itemRow.push(itemData.totalQtyRecap, null, null);
           allRowsForThisSheetContent.push(itemRow);
         });
 
@@ -154,6 +158,7 @@ async function main() {
     return null;
   }
 
+  // ... (sisa kode main() untuk memproses importer kosong dan valid, sama seperti sebelumnya) ...
   if (dataWithBlankOrNAImporter.length > 0) {
     const blankImporterSheetNameInput = readlineSync.question("Masukkan nama sheet untuk data tanpa Importer (default: Data_Tanpa_Importer): ").trim() || "Data_Tanpa_Importer";
     const sheetName = blankImporterSheetNameInput.substring(0, 30).replace(/[\*\?\:\\\/\[\]]/g, "_");
