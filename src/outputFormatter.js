@@ -7,48 +7,64 @@ const fs = require("fs");
 const DEFAULT_OUTPUT_FOLDER = "processed_excel";
 
 function formatOutputForGroup(groupName, summaryLvl1Data, summaryLvl2Data) {
-  const outputRowsAsStrings = []; // Akan menyimpan string yang sudah di-join dengan tab
+  const outputRowsAsStrings = [];
 
-  // Revisi Header
   const headerLine1Parts = ["SUPPLIER", "HS CODE", "ITEM", "GSM", "ADD ON"];
-  const headerLine2Parts = ["", "", "", "", ""]; // Kolom awal kosong untuk baris kedua header
+  const headerLine2Parts = ["", "", "", "", ""];
 
   MONTH_ORDER.forEach((month) => {
-    headerLine1Parts.push(month, ""); // Nama bulan di baris 1, kolom sebelahnya kosong
-    headerLine2Parts.push("PRICE", "QTY"); // PRICE dan QTY di baris 2
+    headerLine1Parts.push(month, "");
+    headerLine2Parts.push("PRICE", "QTY");
   });
-  headerLine1Parts.push("RECAP", "", ""); // RECAP di baris 1, 2 kolom sebelahnya kosong
-  headerLine2Parts.push("AVG PRICE", "INCOTERM", "TOTAL QTY"); // Detail rekap di baris 2
+  headerLine1Parts.push("RECAP", "", "");
+  headerLine2Parts.push("AVG PRICE", "INCOTERM", "TOTAL QTY");
 
   outputRowsAsStrings.push(headerLine1Parts.join("\t"));
   outputRowsAsStrings.push(headerLine2Parts.join("\t"));
 
-  const distinctHsCodeGsm = summaryLvl2Data
-    .map((item) => ({ hsCode: item.hsCode, gsm: item.gsm }))
+  // REVISI: Sorting sekarang juga berdasarkan ITEM dan ADD ON
+  const distinctCombinations = summaryLvl2Data
+    .map((item) => ({
+      hsCode: item.hsCode,
+      item: item.item, // Tambahkan item
+      gsm: item.gsm,
+      addOn: item.addOn, // Tambahkan addOn
+    }))
     .sort((a, b) => {
       if (a.hsCode < b.hsCode) return -1;
       if (a.hsCode > b.hsCode) return 1;
+      if (a.item < b.item) return -1; // Urutkan berdasarkan item
+      if (a.item > b.item) return 1;
       if (a.gsm < b.gsm) return -1;
       if (a.gsm > b.gsm) return 1;
+      if (a.addOn < b.addOn) return -1; // Urutkan berdasarkan addOn
+      if (a.addOn > b.addOn) return 1;
       return 0;
     })
-    .filter((item, index, self) => index === self.findIndex((t) => t.hsCode === item.hsCode && t.gsm === item.gsm));
+    .filter(
+      (item, index, self) =>
+        index ===
+        self.findIndex(
+          (t) =>
+            t.hsCode === item.hsCode &&
+            t.item === item.item && // Bandingkan item
+            t.gsm === item.gsm &&
+            t.addOn === item.addOn // Bandingkan addOn
+        )
+    );
 
-  distinctHsCodeGsm.forEach((combo, index) => {
+  distinctCombinations.forEach((combo, index) => {
     const rowParts = [];
-    // Revisi Kolom Supplier: Hanya diisi untuk baris pertama dari setiap grup supplier
-    if (index === 0) {
-      rowParts.push(groupName);
-    } else {
-      rowParts.push(""); // Kosongkan untuk baris berikutnya dalam grup yang sama
-    }
+    rowParts.push(index === 0 ? groupName : "");
     rowParts.push(combo.hsCode);
-    rowParts.push("N/A"); // ITEM - default
+    // REVISI: Isi kolom ITEM dan ADD ON dari data combo
+    rowParts.push(combo.item);
     rowParts.push(combo.gsm);
-    rowParts.push("N/A"); // ADD ON - default
+    rowParts.push(combo.addOn);
 
     MONTH_ORDER.forEach((month) => {
-      const monthData = summaryLvl1Data.find((d) => d.hsCode === combo.hsCode && d.gsm === combo.gsm && d.month === month);
+      // REVISI: Pencarian data bulanan sekarang juga berdasarkan ITEM dan ADD ON
+      const monthData = summaryLvl1Data.find((d) => d.hsCode === combo.hsCode && d.item === combo.item && d.gsm === combo.gsm && d.addOn === combo.addOn && d.month === month);
       if (monthData) {
         rowParts.push(monthData.avgPrice.toFixed(2));
         rowParts.push(Math.round(monthData.totalQty));
@@ -57,17 +73,18 @@ function formatOutputForGroup(groupName, summaryLvl1Data, summaryLvl2Data) {
       }
     });
 
-    const recapData = summaryLvl2Data.find((d) => d.hsCode === combo.hsCode && d.gsm === combo.gsm);
+    // REVISI: Pencarian data rekap sekarang juga berdasarkan ITEM dan ADD ON
+    const recapData = summaryLvl2Data.find((d) => d.hsCode === combo.hsCode && d.item === combo.item && d.gsm === combo.gsm && d.addOn === combo.addOn);
     if (recapData) {
       rowParts.push(recapData.avgOfSummaryPrice.toFixed(2));
-      rowParts.push("N/A"); // INCOTERM - default
+      rowParts.push("N/A");
       rowParts.push(Math.round(recapData.totalOfSummaryQty));
     } else {
       rowParts.push("N/A", "N/A", "N/A");
     }
     outputRowsAsStrings.push(rowParts.join("\t"));
   });
-  return outputRowsAsStrings; // Kembalikan array of string (baris TSV)
+  return outputRowsAsStrings;
 }
 
 function writeOutputToFile(workbookOutput, outputFileName = "summary_output.xlsx") {

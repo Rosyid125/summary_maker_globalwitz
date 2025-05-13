@@ -62,6 +62,11 @@ function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess 
     return jsonData.map((row, rowIndex) => {
       const dateValue = row["DATE"];
       let month = "N/A";
+      let itemValue = String(row["ITEM"] || "").trim();
+      if (itemValue === "N/A") itemValue = ""; // Normalisasi N/A menjadi kosong
+
+      let addOnValue = String(row["ADD ON"] || "").trim();
+      if (addOnValue === "N/A") addOnValue = ""; // Normalisasi N/A menjadi kosong
 
       if (dateValue !== null && typeof dateValue !== "undefined") {
         let parsedDateObj = null;
@@ -116,6 +121,8 @@ function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess 
         originCountry: String(row["ORIGIN COUNTRY"] || "N/A").trim(),
         usdQtyUnit: parseNumber(row["CIF KG Unit In USD"] || row["USD Qty Unit"]),
         qty: parseNumber(row["Net KG Wt"] || row["qty"]),
+        item: itemValue,
+        addOn: addOnValue,
       };
     });
   } catch (error) {

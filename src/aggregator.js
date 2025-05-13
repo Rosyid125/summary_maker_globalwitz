@@ -2,20 +2,32 @@
 const { averageGreaterThanZero } = require("./utils");
 
 function performAggregation(data) {
-  // 'data' di sini adalah 'groupData' dari index.js
   const monthlySummary = {};
   data.forEach((row) => {
-    // Pastikan 'row.month' digunakan di sini
-    if (!row.month || row.month === "N/A" || !row.hsCode || !row.gsm) {
-      // console.warn("Baris dilewati karena bulan, HS Code, atau GSM tidak valid:", row);
+    // Pastikan month, hsCode, gsm, item, dan addOn valid sebelum membuat kunci
+    if (
+      !row.month ||
+      row.month === "N/A" ||
+      !row.hsCode ||
+      row.hsCode === "N/A" ||
+      !row.gsm ||
+      row.gsm === "N/A" ||
+      !row.item ||
+      row.item === "N/A" || // Tambahkan pengecekan untuk item
+      !row.addOn // addOn bisa string kosong, jadi cek keberadaannya saja (atau bisa juga row.addOn === 'N/A')
+    ) {
+      // console.warn("Baris dilewati karena data kunci tidak valid:", row);
       return;
     }
-    const key = `${row.month}-${row.hsCode}-${row.gsm}`; // Menggunakan row.month
+    // REVISI: Kunci sekarang mencakup ITEM dan ADD ON
+    const key = `${row.month}-${row.hsCode}-${row.item}-${row.gsm}-${row.addOn}`;
     if (!monthlySummary[key]) {
       monthlySummary[key] = {
-        month: row.month, // Menyimpan month yang benar
+        month: row.month,
         hsCode: row.hsCode,
+        item: row.item, // Simpan item
         gsm: row.gsm,
+        addOn: row.addOn, // Simpan addOn
         usdQtyUnits: [],
         totalQty: 0,
       };
@@ -25,22 +37,25 @@ function performAggregation(data) {
   });
 
   const summaryLvl1Data = Object.values(monthlySummary).map((group) => ({
-    month: group.month, // 'month' di sini berasal dari kunci monthlySummary
+    month: group.month,
     hsCode: group.hsCode,
+    item: group.item, // Sertakan item
     gsm: group.gsm,
+    addOn: group.addOn, // Sertakan addOn
     avgPrice: averageGreaterThanZero(group.usdQtyUnits),
     totalQty: group.totalQty,
   }));
 
-  // ... (sisa kode aggregator sama, summaryLvl2 menggunakan hasil summaryLvl1) ...
   const recapSummary = {};
   summaryLvl1Data.forEach((row) => {
-    // row di sini adalah item dari summaryLvl1Data, yang sudah punya 'month'
-    const key = `${row.hsCode}-${row.gsm}`;
+    // REVISI: Kunci rekap juga mencakup ITEM dan ADD ON
+    const key = `${row.hsCode}-${row.item}-${row.gsm}-${row.addOn}`;
     if (!recapSummary[key]) {
       recapSummary[key] = {
         hsCode: row.hsCode,
+        item: row.item, // Simpan item
         gsm: row.gsm,
+        addOn: row.addOn, // Simpan addOn
         avgPrices: [],
         totalQty: 0,
       };
@@ -51,7 +66,9 @@ function performAggregation(data) {
 
   const summaryLvl2Data = Object.values(recapSummary).map((group) => ({
     hsCode: group.hsCode,
+    item: group.item, // Sertakan item
     gsm: group.gsm,
+    addOn: group.addOn, // Sertakan addOn
     avgOfSummaryPrice: averageGreaterThanZero(group.avgPrices),
     totalOfSummaryQty: group.totalQty,
   }));
