@@ -1,8 +1,8 @@
 // index.js
 const readlineSync = require("readline-sync");
-const { MONTH_ORDER, averageGreaterThanZero } = require("./src/utils"); // Tambahkan averageGreaterThanZero jika perlu
+const { MONTH_ORDER } = require("./src/utils");
 const { readAndPreprocessData } = require("./src/excelReader");
-const { performAggregation } = require("./src/aggregator"); // performAggregation masih berguna untuk per grup supplier
+const { performAggregation } = require("./src/aggregator");
 const { prepareGroupBlock, writeOutputToFile } = require("./src/outputFormatter");
 
 const DEFAULT_INPUT_FILENAME = "input.xlsx";
@@ -37,7 +37,6 @@ async function main() {
     }
   });
 
-  // Fungsi untuk memproses data untuk satu sheet
   function processSheetData(dataToProcessForSheet, sheetBaseName) {
     console.log(`\nMemproses data untuk sheet berbasis "${sheetBaseName}"...`);
 
@@ -50,18 +49,16 @@ async function main() {
       groupedBySupplierOrOrigin[groupKey].push(row);
     });
 
-    const allRowsForThisSheetContent = []; // Hanya konten (tanpa header global sheet)
+    const allRowsForThisSheetContent = [];
     const supplierGroupsMeta = [];
-    let sheetOverallMonthlyTotals = Array(12).fill(0); // Total bulanan untuk KESELURUHAN sheet
-
-    // Data untuk tabel "TOTAL PER ITEM"
-    const itemSummaryDataForSheet = {}; // Kunci: 'item-gsm-addon' -> { monthlyQtys: [12], totalQty: 0 }
+    let sheetOverallMonthlyTotals = Array(12).fill(0);
+    const itemSummaryDataForSheet = {};
 
     const groupKeys = Object.keys(groupedBySupplierOrOrigin).sort();
     groupKeys.forEach((groupName, groupIndex) => {
       console.log(`  - Memproses grup supplier/origin: ${groupName}`);
       const groupData = groupedBySupplierOrOrigin[groupName];
-      const { summaryLvl1, summaryLvl2 } = performAggregation(groupData); // Agregasi per grup supplier
+      const { summaryLvl1, summaryLvl2 } = performAggregation(groupData);
 
       if (summaryLvl2.length > 0) {
         const groupBlock = prepareGroupBlock(groupName, summaryLvl1, summaryLvl2);
@@ -74,14 +71,10 @@ async function main() {
           hasFollowingGroup: groupIndex < groupKeys.length - 1,
         });
 
-        // Akumulasi total bulanan sheet dari total bulanan grup
-        // `groupBlock.groupMonthlyTotals` tidak ada, kita ambil dari `summaryLvl1` nya grup ini
         summaryLvl1.forEach((lvl1Row) => {
           const monthIndex = MONTH_ORDER.indexOf(lvl1Row.month);
           if (monthIndex !== -1) {
             sheetOverallMonthlyTotals[monthIndex] += lvl1Row.totalQty;
-
-            // Akumulasi untuk TOTAL PER ITEM
             const itemKey = `${lvl1Row.item}-${lvl1Row.gsm}-${lvl1Row.addOn}`;
             if (!itemSummaryDataForSheet[itemKey]) {
               itemSummaryDataForSheet[itemKey] = {
@@ -104,18 +97,19 @@ async function main() {
     });
 
     if (allRowsForThisSheetContent.length > 0) {
-      // -- Tambahkan tabel TOTAL ALL SUPPLIER PER MO & PER QUARTAL --
-      allRowsForThisSheetContent.push([]); // Baris kosong pemisah
-      const totalAllHeaderRow = ["Month", null, null, null, null, ...MONTH_ORDER.map((m) => [m, null]).flat(), "RECAP", null, null];
-      allRowsForThisSheetContent.push(totalAllHeaderRow);
+      allRowsForThisSheetContent.push([]);
 
+      const totalAllHeaderMonthRow = ["Month", null, null, null, null];
+      MONTH_ORDER.forEach((m) => totalAllHeaderMonthRow.push(m, null));
+      totalAllHeaderMonthRow.push("RECAP", null, null);
+      allRowsForThisSheetContent.push(totalAllHeaderMonthRow);
+
+      const grandTotalAllSuppliers = sheetOverallMonthlyTotals.reduce((sum, qty) => sum + qty, 0);
       const totalAllMoRow = ["TOTAL ALL SUPPLIER PER MO", null, null, null, null];
-      let grandTotalAllSuppliers = 0;
       sheetOverallMonthlyTotals.forEach((total) => {
-        totalAllMoRow.push(total, null); // Qty, Price (null)
-        grandTotalAllSuppliers += total;
+        totalAllMoRow.push(total, null);
       });
-      totalAllMoRow.push(null, null, grandTotalAllSuppliers);
+      totalAllMoRow.push(grandTotalAllSuppliers, null, null); // REVISI: Nilai total di sel pertama area merge RECAP
       allRowsForThisSheetContent.push(totalAllMoRow);
 
       const quarterlyTotalsAll = [0, 0, 0, 0];
@@ -133,38 +127,33 @@ async function main() {
       totalAllQuartalRow.push(null, null, null);
       allRowsForThisSheetContent.push(totalAllQuartalRow);
 
-      // -- Tambahkan tabel TOTAL PER ITEM --
-      allRowsForThisSheetContent.push([]); // Baris kosong pemisah
-      const itemTableHeaderRow1 = ["TOTAL PER ITEM", null, null, null, null, ...MONTH_ORDER.map((m) => [m, null]).flat(), "RECAP", null, null];
-      // Untuk header "PRICE QTY" di bawah bulan, kita bisa buat dummy row atau handle saat styling
-      const itemTableHeaderRow2 = ["(Item-GSM-AddOn)", null, null, null, null];
-      MONTH_ORDER.forEach(() => itemTableHeaderRow2.push("QTY", null)); // Hanya QTY per bulan
-      itemTableHeaderRow2.push(null, null, "TOTAL QTY"); // RECAP
+      allRowsForThisSheetContent.push([]);
+      const itemTableHeaderRow1 = ["TOTAL PER ITEM", null, null, null, null];
+      MONTH_ORDER.forEach((m) => itemTableHeaderRow1.push(m, null));
+      itemTableHeaderRow1.push("RECAP", null, null);
       allRowsForThisSheetContent.push(itemTableHeaderRow1);
-      allRowsForThisSheetContent.push(itemTableHeaderRow2);
+      // Baris header kedua untuk TOTAL PER ITEM DIHAPUS sesuai permintaan
 
       Object.keys(itemSummaryDataForSheet)
         .sort()
         .forEach((itemKey) => {
           const itemData = itemSummaryDataForSheet[itemKey];
           const itemRow = [`${itemData.item} ${itemData.gsm} ${itemData.addOn}`, null, null, null, null];
-          itemData.monthlyQtys.forEach((qty) => itemRow.push(qty, null)); // Qty, Price (null)
-          itemRow.push(null, null, itemData.totalQtyRecap);
+          itemData.monthlyQtys.forEach((qty) => itemRow.push(qty, null));
+          itemRow.push(itemData.totalQtyRecap, null, null); // REVISI: Nilai total di sel pertama area merge RECAP
           allRowsForThisSheetContent.push(itemRow);
         });
 
       return {
         name: sheetBaseName,
-        allRowsForSheetContent: allRowsForThisSheetContent, // Mengirim konten tanpa header global awal
+        allRowsForSheetContent: allRowsForThisSheetContent,
         supplierGroupsMeta: supplierGroupsMeta,
         totalColumns: totalColumns,
       };
     }
     return null;
   }
-  //--------------------------------------------------------------------
 
-  // Proses untuk data tanpa importer
   if (dataWithBlankOrNAImporter.length > 0) {
     const blankImporterSheetNameInput = readlineSync.question("Masukkan nama sheet untuk data tanpa Importer (default: Data_Tanpa_Importer): ").trim() || "Data_Tanpa_Importer";
     const sheetName = blankImporterSheetNameInput.substring(0, 30).replace(/[\*\?\:\\\/\[\]]/g, "_");
@@ -179,7 +168,6 @@ async function main() {
     console.log("Tidak ada data dengan Importer kosong atau N/A.");
   }
 
-  // Proses untuk importer valid
   const uniqueImporters = [...new Set(dataWithValidImporter.map((row) => row.importer))].sort();
   let existingSheetNames = workbookDataForExcelJS.map((s) => s.name);
 
