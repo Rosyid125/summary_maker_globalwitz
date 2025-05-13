@@ -2,10 +2,41 @@
 const XLSX = require("xlsx");
 const path = require("path");
 const fs = require("fs");
-const { MONTH_ORDER, excelSerialNumberToDate, getMonthName, parseNumber } = require("./utils"); // Pastikan getMonthName sudah benar di utils.js
+const { MONTH_ORDER, getMonthName, parseNumber } = require("./utils"); // excelSerialNumberToDate mungkin tidak lagi utama
 
 const DEFAULT_INPUT_FOLDER = "original_excel";
 const DEFAULT_SHEET_NAME = "DATA OLAH";
+
+function parseDate_DDMMYYYY(dateString) {
+  if (typeof dateString !== "string") return null;
+  const parts = dateString.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
+  if (!parts) return null;
+
+  // parts[0] adalah string asli, parts[1] adalah hari, parts[2] adalah bulan, parts[3] adalah tahun
+  const day = parseInt(parts[1], 10);
+  const month = parseInt(parts[2], 10); // Bulan adalah 1-12
+  let year = parseInt(parts[3], 10);
+
+  // Heuristik untuk tahun 2 digit (misalnya '24' menjadi '2024')
+  if (year < 100) {
+    year += year > 50 ? 1900 : 2000; // Asumsi: >50 adalah abad 20, <=50 adalah abad 21
+  }
+
+  if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null; // Validasi dasar
+
+  // JavaScript Date constructor menggunakan bulan 0-11
+  try {
+    const dateObj = new Date(year, month - 1, day);
+    // Periksa apakah tanggal yang dibuat valid (misalnya 31 Feb menjadi 3 Mar)
+    if (dateObj.getFullYear() === year && dateObj.getMonth() === month - 1 && dateObj.getDate() === day) {
+      return dateObj;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
 
 function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess = DEFAULT_SHEET_NAME) {
   const inputFile = path.join(DEFAULT_INPUT_FOLDER, inputFileName);
@@ -21,52 +52,47 @@ function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess 
       return null;
     }
     const worksheet = workbook.Sheets[sheetNameToProcess];
+    // Penting: Jika Excel menyimpan tanggal dd/mm/yyyy sebagai string, raw:false aman.
+    // Jika Excel menyimpannya sebagai angka (nomor seri tanggal), maka raw:true mungkin diperlukan untuk mendapatkan string aslinya,
+    // TAPI jika formatnya konsisten dd/mm/yyyy, `raw:false` seharusnya memberikan string tanggalnya.
     const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, defval: null });
 
     console.log(`Membaca ${jsonData.length} baris dari sheet "${sheetNameToProcess}"...`);
 
     return jsonData.map((row, rowIndex) => {
-      // Tambahkan rowIndex untuk debugging jika perlu
       const dateValue = row["DATE"];
-      let month = "N/A"; // Default jika tidak bisa diparsing
+      let month = "N/A";
 
       if (dateValue !== null && typeof dateValue !== "undefined") {
         let parsedDateObj = null;
 
-        // 1. Coba parse sebagai nomor seri Excel
-        if (typeof dateValue === "number") {
-          if (dateValue > 1 && dateValue < 2958465) {
-            // Batas wajar untuk nomor seri Excel
-            parsedDateObj = excelSerialNumberToDate(dateValue);
-          } else if (dateValue.toString().length === 5 && parseInt(dateValue.toString().substring(0, 2)) >= 1 && parseInt(dateValue.toString().substring(0, 2)) <= 12) {
-            // Jika formatnya MMYYY (misal 45755, ini tidak standar, mungkin perlu penyesuaian)
-            // Ini asumsi, jika format DATE Anda benar-benar hanya 5 digit seperti contoh, perlu klarifikasi lebih lanjut
-            // Untuk saat ini, kita akan coba interpretasi sebagai YYYYMM jika panjangnya 6
-          }
-        }
+        if (typeof dateValue === "string") {
+          // Prioritaskan parsing dd/mm/yyyy
+          parsedDateObj = parseDate_DDMMYYYY(dateValue.trim());
 
-        // 2. Jika bukan nomor seri atau parsing gagal, coba sebagai string
-        if (!parsedDateObj && typeof dateValue === "string") {
-          // Coba format YYYYMM (misalnya '202412')
-          if (/^\d{6}$/.test(dateValue)) {
+          // Jika gagal dan formatnya YYYYMM (sebagai fallback, jika mungkin masih ada)
+          if (!parsedDateObj && /^\d{6}$/.test(dateValue.trim())) {
             const year = parseInt(dateValue.substring(0, 4));
             const monthNum = parseInt(dateValue.substring(4, 6));
             if (monthNum >= 1 && monthNum <= 12 && year >= 1900 && year <= 2100) {
-              // Validasi dasar
-              parsedDateObj = new Date(year, monthNum - 1, 1); // Buat objek Date dummy hanya untuk bulan
-            }
-          } else {
-            // Coba format lain yang bisa di-parse Date.parse()
-            const timestamp = Date.parse(dateValue);
-            if (!isNaN(timestamp)) {
-              parsedDateObj = new Date(timestamp);
+              parsedDateObj = new Date(year, monthNum - 1, 1);
             }
           }
+          // Fallback lain jika diperlukan, misalnya Date.parse untuk format US
+          // else if (!parsedDateObj) {
+          // const timestamp = Date.parse(dateValue.trim());
+          // if (!isNaN(timestamp)) {
+          // parsedDateObj = new Date(timestamp);
+          // }
+          // }
         }
-
-        // 3. Jika berupa objek Date langsung dari xlsx (jarang, tapi mungkin)
-        else if (dateValue instanceof Date && !isNaN(dateValue)) {
-          parsedDateObj = dateValue;
+        // Jika Excel secara internal menyimpan sebagai angka dan `raw:false` mengembalikannya sebagai angka
+        else if (typeof dateValue === "number" && dateValue > 1 && dateValue < 2958465) {
+          // Jika ternyata tetap ada nomor seri Excel, kita masih bisa menanganinya
+          // const { excelSerialNumberToDate } = require('./utils'); // Impor jika perlu
+          // parsedDateObj = excelSerialNumberToDate(dateValue);
+          console.warn(`Baris ${rowIndex + 2}: Kolom DATE adalah angka (${dateValue}), diharapkan dd/mm/yyyy. Coba di-parse sebagai nomor seri Excel.`);
+          // Anda mungkin ingin membuang excelSerialNumberToDate dari utils jika benar-benar tidak diperlukan lagi
         }
 
         if (parsedDateObj && !isNaN(parsedDateObj.getTime())) {
@@ -74,13 +100,12 @@ function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess 
         }
       }
 
-      // Debugging jika bulan masih N/A
-      // if (month === 'N/A' && dateValue) {
-      //     console.warn(`Baris ${rowIndex + 2}: Tidak dapat memparsing DATE "${dateValue}" menjadi bulan.`);
-      // }
+      if (month === "N/A" && dateValue) {
+        console.warn(`Baris ${rowIndex + 2}: Tidak dapat memparsing DATE "${dateValue}" menjadi bulan (format diharapkan dd/mm/yyyy).`);
+      }
 
       return {
-        month: month, // Akan 'N/A' jika tidak bisa diparsing
+        month: month,
         hsCode: String(row["HS CODE"] || "N/A").trim(),
         itemDesc: String(row["ITEM DESC"] || "N/A").trim(),
         gsm: String(row["GSM"] || "N/A").trim(),
