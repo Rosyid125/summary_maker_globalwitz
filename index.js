@@ -1,9 +1,9 @@
 // index.js
 const readlineSync = require("readline-sync");
-const XLSX = require("xlsx");
+const { MONTH_ORDER } = require("./src/utils");
 const { readAndPreprocessData } = require("./src/excelReader");
 const { performAggregation } = require("./src/aggregator");
-const { formatOutputForGroup, writeOutputToFile } = require("./src/outputFormatter");
+const { prepareGroupBlock, writeOutputToFile } = require("./src/outputFormatter"); // Ganti nama fungsi
 
 const DEFAULT_INPUT_FILENAME = "input.xlsx";
 const DEFAULT_OUTPUT_FILENAME = "summary_output.xlsx";
@@ -14,6 +14,7 @@ async function main() {
 
   const inputFile = readlineSync.question(`Masukkan nama file Excel input (default: ${DEFAULT_INPUT_FILENAME}): `) || DEFAULT_INPUT_FILENAME;
   const sheetName = readlineSync.question(`Masukkan nama sheet yang akan diproses (default: ${DEFAULT_SHEET_NAME}): `) || DEFAULT_SHEET_NAME;
+  const periodYear = readlineSync.question(`Masukkan tahun periode (misal, 2024): `) || new Date().getFullYear();
 
   let allData = readAndPreprocessData(inputFile, sheetName);
 
@@ -22,9 +23,8 @@ async function main() {
     return;
   }
 
-  const workbookOutput = XLSX.utils.book_new();
+  const workbookDataForExcelJS = [];
 
-  // Pisahkan data: yang punya importer valid dan yang tidak
   const dataWithValidImporter = [];
   const dataWithBlankOrNAImporter = [];
 
@@ -36,65 +36,14 @@ async function main() {
     }
   });
 
-  // Proses data dengan IMPORTER kosong/N/A terlebih dahulu
-  if (dataWithBlankOrNAImporter.length > 0) {
-    console.log(`Ditemukan ${dataWithBlankOrNAImporter.length} baris dengan IMPORTER kosong atau "N/A".`);
-    const blankImporterSheetName = readlineSync.question("Masukkan nama sheet untuk data tanpa Importer: ").trim();
+  // Hitung total kolom sekali saja berdasarkan MONTH_ORDER dan kolom tetap
+  const totalColumns = 5 + MONTH_ORDER.length * 2 + 3; // 5 awal + (bulan*2) + 3 recap
 
-    if (blankImporterSheetName) {
-      console.log(`\nMemproses data tanpa Importer untuk sheet "${blankImporterSheetName}"...`);
-      // Pengelompokan untuk data tanpa importer (berdasarkan Supplier/Origin)
-      const groupedBySupplierOrOriginForBlank = {};
-      dataWithBlankOrNAImporter.forEach((row) => {
-        // Revisi 3: Jika SUPPLIER kosong atau N/A, gunakan ORIGIN COUNTRY
-        const groupKey = row.supplier && row.supplier !== "N/A" ? row.supplier : row.originCountry;
-        if (!groupedBySupplierOrOriginForBlank[groupKey]) {
-          groupedBySupplierOrOriginForBlank[groupKey] = [];
-        }
-        groupedBySupplierOrOriginForBlank[groupKey].push(row);
-      });
-
-      const sheetDataForBlankImporterTSVRows = [];
-      const groupKeysBlank = Object.keys(groupedBySupplierOrOriginForBlank).sort();
-
-      groupKeysBlank.forEach((groupName, groupIndex) => {
-        console.log(`  - Memproses grup (tanpa importer): ${groupName}`);
-        const groupData = groupedBySupplierOrOriginForBlank[groupName];
-        const { summaryLvl1, summaryLvl2 } = performAggregation(groupData);
-
-        if (summaryLvl2.length > 0) {
-          const formattedGroupOutputTSVRows = formatOutputForGroup(groupName, summaryLvl1, summaryLvl2);
-          sheetDataForBlankImporterTSVRows.push(...formattedGroupOutputTSVRows);
-          if (groupIndex < groupKeysBlank.length - 1) {
-            sheetDataForBlankImporterTSVRows.push("");
-          }
-        }
-      });
-
-      if (sheetDataForBlankImporterTSVRows.length > 0) {
-        const sheetAoA = sheetDataForBlankImporterTSVRows.map((rowStr) => rowStr.split("\t"));
-        const newSheet = XLSX.utils.aoa_to_sheet(sheetAoA);
-        XLSX.utils.book_append_sheet(workbookOutput, newSheet, blankImporterSheetName.substring(0, 30)); // Batasi panjang
-        console.log(`    Sheet "${blankImporterSheetName.substring(0, 30)}" untuk data tanpa Importer telah dibuat.`);
-      } else {
-        console.log(`    Tidak ada data summary yang dihasilkan untuk data tanpa Importer.`);
-      }
-    } else {
-      console.log("Nama sheet untuk data tanpa Importer tidak valid, data ini akan dilewati.");
-    }
-  }
-
-  // Proses data dengan IMPORTER valid
-  const uniqueImporters = [...new Set(dataWithValidImporter.map((row) => row.importer))].sort();
-
-  for (const importer of uniqueImporters) {
-    console.log(`\nMemproses untuk IMPORTER: ${importer}...`);
-    const importerData = dataWithValidImporter.filter((row) => row.importer === importer);
-    if (importerData.length === 0) continue;
+  function processAndBuildSheet(dataToProcess, sheetBaseName) {
+    console.log(`\nMemproses data untuk sheet berbasis "${sheetBaseName}"...`);
 
     const groupedBySupplierOrOrigin = {};
-    importerData.forEach((row) => {
-      // Revisi 3: Jika SUPPLIER kosong atau N/A, gunakan ORIGIN COUNTRY
+    dataToProcess.forEach((row) => {
       const groupKey = row.supplier && row.supplier !== "N/A" ? row.supplier : row.originCountry;
       if (!groupedBySupplierOrOrigin[groupKey]) {
         groupedBySupplierOrOrigin[groupKey] = [];
@@ -102,46 +51,89 @@ async function main() {
       groupedBySupplierOrOrigin[groupKey].push(row);
     });
 
-    const sheetDataForImporterTSVRows = [];
-    const groupKeys = Object.keys(groupedBySupplierOrOrigin).sort();
+    const allRowsForThisSheet = []; // Tidak ada header global di sini lagi
+    const supplierGroupsMeta = [];
 
+    const groupKeys = Object.keys(groupedBySupplierOrOrigin).sort();
     groupKeys.forEach((groupName, groupIndex) => {
       console.log(`  - Memproses grup: ${groupName}`);
       const groupData = groupedBySupplierOrOrigin[groupName];
       const { summaryLvl1, summaryLvl2 } = performAggregation(groupData);
 
       if (summaryLvl2.length > 0) {
-        const formattedGroupOutputTSVRows = formatOutputForGroup(groupName, summaryLvl1, summaryLvl2);
-        sheetDataForImporterTSVRows.push(...formattedGroupOutputTSVRows);
+        // prepareGroupBlock sekarang membuat blok lengkap (header + data + total)
+        const groupBlock = prepareGroupBlock(groupName, summaryLvl1, summaryLvl2);
+        allRowsForThisSheet.push(...groupBlock.groupBlockRows);
+
+        supplierGroupsMeta.push({
+          name: groupName,
+          productRowCount: groupBlock.distinctCombinationsCount,
+          headerRowCount: groupBlock.headerRowCount, // Simpan jumlah baris header grup
+          hasFollowingGroup: groupIndex < groupKeys.length - 1,
+        });
+
         if (groupIndex < groupKeys.length - 1) {
-          sheetDataForImporterTSVRows.push("");
+          allRowsForThisSheet.push([]);
         }
       }
     });
 
-    if (sheetDataForImporterTSVRows.length > 0) {
-      const sheetAoA = sheetDataForImporterTSVRows.map((rowStr) => rowStr.split("\t"));
-      const newSheet = XLSX.utils.aoa_to_sheet(sheetAoA);
+    if (allRowsForThisSheet.length > 0) {
+      return {
+        name: sheetBaseName,
+        rowsForSheet: allRowsForThisSheet, // Berisi semua blok grup
+        supplierGroupsMeta: supplierGroupsMeta,
+        totalColumns: totalColumns, // Kirim total kolom untuk merge periode
+      };
+    }
+    return null;
+  }
+  //--------------------------------------------------------------------
 
-      let currentSheetName = importer.replace(/[\*\?\:\\\/\[\]]/g, "_");
-      currentSheetName = currentSheetName.substring(0, 30);
-
-      let N = 0;
-      let finalSheetName = currentSheetName;
-      while (workbookOutput.SheetNames.includes(finalSheetName)) {
-        N++;
-        finalSheetName = `${currentSheetName.substring(0, Math.max(0, 28 - String(N).length))}${N}`; // Pastikan cukup ruang untuk nomor
+  if (dataWithBlankOrNAImporter.length > 0) {
+    const blankImporterSheetNameInput = readlineSync.question("Masukkan nama sheet untuk data tanpa Importer: ").trim();
+    if (blankImporterSheetNameInput) {
+      const sheetName = blankImporterSheetNameInput.substring(0, 30).replace(/[\*\?\:\\\/\[\]]/g, "_");
+      const sheetResult = processAndBuildSheet(dataWithBlankOrNAImporter, sheetName);
+      if (sheetResult) {
+        workbookDataForExcelJS.push(sheetResult);
+        console.log(`    Data untuk sheet "${sheetName}" telah disiapkan.`);
+      } else {
+        console.log(`    Tidak ada data summary yang signifikan untuk data tanpa Importer.`);
       }
-
-      XLSX.utils.book_append_sheet(workbookOutput, newSheet, finalSheetName);
-      console.log(`    Sheet "${finalSheetName}" telah dibuat.`);
     } else {
-      console.log(`    Tidak ada data summary yang dihasilkan untuk IMPORTER: ${importer}.`);
+      console.log("Nama sheet untuk data tanpa Importer tidak valid, data ini akan dilewati.");
+    }
+  }
+
+  const uniqueImporters = [...new Set(dataWithValidImporter.map((row) => row.importer))].sort();
+  let existingSheetNames = workbookDataForExcelJS.map((s) => s.name);
+
+  for (const importer of uniqueImporters) {
+    const importerData = dataWithValidImporter.filter((row) => row.importer === importer);
+    if (importerData.length === 0) continue;
+
+    let baseSheetName = importer.replace(/[\*\?\:\\\/\[\]]/g, "_").substring(0, 30);
+    const sheetResult = processAndBuildSheet(importerData, baseSheetName);
+
+    if (sheetResult) {
+      let N = 0;
+      let finalSheetName = sheetResult.name;
+      while (existingSheetNames.includes(finalSheetName)) {
+        N++;
+        finalSheetName = `${sheetResult.name.substring(0, Math.max(0, 28 - String(N).length))}${N}`;
+      }
+      sheetResult.name = finalSheetName;
+      existingSheetNames.push(finalSheetName);
+      workbookDataForExcelJS.push(sheetResult);
+      console.log(`    Data untuk sheet "${finalSheetName}" telah disiapkan.`);
+    } else {
+      console.log(`    Tidak ada data summary yang signifikan untuk IMPORTER: ${importer}.`);
     }
   }
 
   const outputFile = readlineSync.question(`Masukkan nama file Excel output (default: ${DEFAULT_OUTPUT_FILENAME}): `) || DEFAULT_OUTPUT_FILENAME;
-  writeOutputToFile(workbookOutput, outputFile);
+  await writeOutputToFile(workbookDataForExcelJS, outputFile, periodYear); // Kirim periodYear
 }
 
 main().catch((err) => console.error("Terjadi kesalahan tidak terduga:", err));
