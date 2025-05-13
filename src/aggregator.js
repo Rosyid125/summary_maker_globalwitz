@@ -3,31 +3,32 @@ const { averageGreaterThanZero } = require("./utils");
 
 function performAggregation(data) {
   const monthlySummary = {};
-  data.forEach((row) => {
-    // Pastikan month, hsCode, gsm, item, dan addOn valid sebelum membuat kunci
-    if (
-      !row.month ||
-      row.month === "N/A" ||
-      !row.hsCode ||
-      row.hsCode === "N/A" ||
-      !row.gsm ||
-      row.gsm === "N/A" ||
-      !row.item ||
-      row.item === "N/A" || // Tambahkan pengecekan untuk item
-      !row.addOn // addOn bisa string kosong, jadi cek keberadaannya saja (atau bisa juga row.addOn === 'N/A')
-    ) {
-      // console.warn("Baris dilewati karena data kunci tidak valid:", row);
+  // console.log(`--- Memulai performAggregation untuk ${data.length} baris ---`);
+
+  data.forEach((row, index) => {
+    // Kolom yang WAJIB ada: month, hsCode.
+    // Kolom gsm, item, addOn bisa 'N/A' atau string kosong dan itu dianggap nilai valid untuk pengelompokan.
+    if (!row.month || row.month === "N/A" || !row.hsCode || row.hsCode === "N/A") {
+      // console.warn(`Aggregator: Baris ${index} dilewati karena bulan atau HS Code tidak valid:`, row);
       return;
     }
-    // REVISI: Kunci sekarang mencakup ITEM dan ADD ON
-    const key = `${row.month}-${row.hsCode}-${row.item}-${row.gsm}-${row.addOn}`;
+
+    // Jika GSM, ITEM, atau ADD ON tidak ada (null/undefined), kita anggap sebagai string kosong agar tetap bisa dikelompokkan.
+    // Jika nilainya adalah string "N/A", itu akan diperlakukan sebagai nilai "N/A" yang unik.
+    const gsmValue = row.gsm || ""; // Jika null/undefined, jadikan string kosong
+    const itemValue = row.item || ""; // Jika null/undefined, jadikan string kosong
+    const addOnValue = row.addOn || ""; // Jika null/undefined, jadikan string kosong
+
+    const key = `${row.month}-${row.hsCode}-${itemValue}-${gsmValue}-${addOnValue}`;
+    // console.log(`Aggregator: Membuat kunci: ${key} untuk baris:`, row);
+
     if (!monthlySummary[key]) {
       monthlySummary[key] = {
         month: row.month,
         hsCode: row.hsCode,
-        item: row.item, // Simpan item
-        gsm: row.gsm,
-        addOn: row.addOn, // Simpan addOn
+        item: itemValue,
+        gsm: gsmValue,
+        addOn: addOnValue,
         usdQtyUnits: [],
         totalQty: 0,
       };
@@ -36,26 +37,33 @@ function performAggregation(data) {
     monthlySummary[key].totalQty += row.qty;
   });
 
+  if (Object.keys(monthlySummary).length === 0 && data.length > 0) {
+    // console.warn("Aggregator: monthlySummary kosong meskipun ada data input. Periksa validitas bulan/HS Code pada semua baris input.");
+  }
+
   const summaryLvl1Data = Object.values(monthlySummary).map((group) => ({
     month: group.month,
     hsCode: group.hsCode,
-    item: group.item, // Sertakan item
+    item: group.item,
     gsm: group.gsm,
-    addOn: group.addOn, // Sertakan addOn
+    addOn: group.addOn,
     avgPrice: averageGreaterThanZero(group.usdQtyUnits),
     totalQty: group.totalQty,
   }));
 
+  if (summaryLvl1Data.length === 0 && data.length > 0) {
+    // console.warn("Aggregator: summaryLvl1Data kosong. Tidak ada grup bulanan yang valid terbentuk.");
+  }
+
   const recapSummary = {};
   summaryLvl1Data.forEach((row) => {
-    // REVISI: Kunci rekap juga mencakup ITEM dan ADD ON
     const key = `${row.hsCode}-${row.item}-${row.gsm}-${row.addOn}`;
     if (!recapSummary[key]) {
       recapSummary[key] = {
         hsCode: row.hsCode,
-        item: row.item, // Simpan item
+        item: row.item,
         gsm: row.gsm,
-        addOn: row.addOn, // Simpan addOn
+        addOn: row.addOn,
         avgPrices: [],
         totalQty: 0,
       };
@@ -66,12 +74,17 @@ function performAggregation(data) {
 
   const summaryLvl2Data = Object.values(recapSummary).map((group) => ({
     hsCode: group.hsCode,
-    item: group.item, // Sertakan item
+    item: group.item,
     gsm: group.gsm,
-    addOn: group.addOn, // Sertakan addOn
+    addOn: group.addOn,
     avgOfSummaryPrice: averageGreaterThanZero(group.avgPrices),
     totalOfSummaryQty: group.totalQty,
   }));
+
+  if (summaryLvl2Data.length === 0 && summaryLvl1Data.length > 0) {
+    // console.warn("Aggregator: summaryLvl2Data kosong meskipun summaryLvl1Data ada. Ini aneh.");
+  }
+  // console.log(`--- Selesai performAggregation, summaryLvl1: ${summaryLvl1Data.length}, summaryLvl2: ${summaryLvl2Data.length} ---`);
 
   return { summaryLvl1: summaryLvl1Data, summaryLvl2: summaryLvl2Data };
 }
