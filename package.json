@@ -1,0 +1,12 @@
+{
+  "name": "program_global_witz",
+  "version": "1.0.0",
+  "description": "sebuah script berbasis cli untuk summary data globalWitz",
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
