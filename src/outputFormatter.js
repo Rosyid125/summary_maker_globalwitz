@@ -6,23 +6,12 @@ const fs = require("fs");
 
 const DEFAULT_OUTPUT_FOLDER = "processed_excel";
 
-/**
- * Menyiapkan SELURUH BLOK DATA (HEADER + produk + total) untuk SATU GRUP supplier/origin.
- * @param {string} groupName Nama grup (Supplier/Origin).
- * @param {Array<Object>} summaryLvl1Data Data summary bulanan untuk grup ini.
- * @param {Array<Object>} summaryLvl2Data Data rekap untuk grup ini.
- * @returns {Object} Objek berisi {
- *    groupBlockRows: Array<Array<any>>, // Termasuk HEADER, data produk & baris total untuk grup ini
- *    overallTotalQtyForGroup: number,
- *    distinctCombinationsCount: number, // Jumlah baris data produk
- *    headerRowCount: 2 // Jumlah baris untuk header grup ini
- * }
- */
+// prepareGroupBlock tetap sama seperti versi sebelumnya
+
 function prepareGroupBlock(groupName, summaryLvl1Data, summaryLvl2Data) {
   const groupBlockRows = [];
   const headerRowCount = 2;
 
-  // --- Tambahkan Header untuk grup ini ---
   const headerRow1 = ["SUPPLIER", "HS CODE", "ITEM", "GSM", "ADD ON"];
   const headerRow2 = [null, null, null, null, null];
   MONTH_ORDER.forEach((month) => {
@@ -34,17 +23,15 @@ function prepareGroupBlock(groupName, summaryLvl1Data, summaryLvl2Data) {
   groupBlockRows.push(headerRow1);
   groupBlockRows.push(headerRow2);
 
-  // --- Data Produk ---
   const monthlyTotals = Array(12).fill(0);
   const distinctCombinations = summaryLvl2Data
     .map((item) => ({
-      /* ... seperti sebelumnya ... */ hsCode: item.hsCode,
+      hsCode: item.hsCode,
       item: item.item,
       gsm: item.gsm,
       addOn: item.addOn,
     }))
     .sort((a, b) => {
-      /* ... logika sorting sama ... */
       if (a.hsCode < b.hsCode) return -1;
       if (a.hsCode > b.hsCode) return 1;
       if (a.item < b.item) return -1;
@@ -65,7 +52,6 @@ function prepareGroupBlock(groupName, summaryLvl1Data, summaryLvl2Data) {
     dataRow.push(combo.gsm);
     dataRow.push(combo.addOn);
     MONTH_ORDER.forEach((month, monthIndex) => {
-      /* ... seperti sebelumnya ... */
       const monthData = summaryLvl1Data.find((d) => d.hsCode === combo.hsCode && d.item === combo.item && d.gsm === combo.gsm && d.addOn === combo.addOn && d.month === month);
       if (monthData) {
         dataRow.push(parseFloat(monthData.avgPrice.toFixed(2)));
@@ -78,7 +64,6 @@ function prepareGroupBlock(groupName, summaryLvl1Data, summaryLvl2Data) {
     });
     const recapData = summaryLvl2Data.find((d) => d.hsCode === combo.hsCode && d.item === combo.item && d.gsm === combo.gsm && d.addOn === combo.addOn);
     if (recapData) {
-      /* ... seperti sebelumnya ... */
       dataRow.push(parseFloat(recapData.avgOfSummaryPrice.toFixed(2)));
       dataRow.push("N/A");
       dataRow.push(Math.round(recapData.totalOfSummaryQty));
@@ -100,7 +85,6 @@ function prepareGroupBlock(groupName, summaryLvl1Data, summaryLvl2Data) {
 
     const quarterlyTotals = [0, 0, 0, 0];
     monthlyTotals.forEach((total, index) => {
-      /* ... seperti sebelumnya ... */
       if (index < 3) quarterlyTotals[0] += total;
       else if (index < 6) quarterlyTotals[1] += total;
       else if (index < 9) quarterlyTotals[2] += total;
@@ -120,6 +104,7 @@ function prepareGroupBlock(groupName, summaryLvl1Data, summaryLvl2Data) {
     overallTotalQtyForGroup: overallTotalQtyForThisGroup,
     distinctCombinationsCount: distinctCombinations.length,
     headerRowCount: headerRowCount,
+    header1Length: headerRow1.length, // Diperlukan untuk styling kolom recap
   };
 }
 
@@ -130,29 +115,40 @@ async function writeOutputToFile(workbookData, outputFileName = "summary_output.
   const outputFile = path.join(DEFAULT_OUTPUT_FOLDER, outputFileName);
   const workbook = new ExcelJS.Workbook();
 
+  const colors = {
+    period: "FF7030A0",
+    supplierCols: "FF002060",
+    q1: "FFFFC000",
+    q2: "FF00B050",
+    q3: "FFFFFF00", // Kuning cerah
+    q4: "FF00B0F0",
+    recap: "FF002060",
+    textWhite: "FFFFFFFF",
+  };
+
   for (const sheetInfo of workbookData) {
-    // sheetInfo: { name, rowsForSheet, supplierGroupsMeta, totalColumns }
     const worksheet = workbook.addWorksheet(sheetInfo.name);
 
     // Tambahkan Baris Judul Periode
-    const periodTitleRow = worksheet.addRow([`${periodYear} PERIODE`]);
-    worksheet.mergeCells(1, 1, 1, sheetInfo.totalColumns); // Merge semua kolom di baris 1
-    periodTitleRow.getCell(1).alignment = { vertical: "middle", horizontal: "center" };
-    periodTitleRow.getCell(1).font = { bold: true, size: 14 };
-    periodTitleRow.height = 20;
+    const periodTitleRowCell = worksheet.addRow([`${periodYear} PERIODE`]).getCell(1);
+    worksheet.mergeCells(1, 1, 1, sheetInfo.totalColumns);
+    periodTitleRowCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.period } };
+    periodTitleRowCell.font = { bold: true, size: 14, color: { argb: colors.textWhite } };
+    periodTitleRowCell.alignment = { vertical: "middle", horizontal: "center" };
+    worksheet.getRow(1).height = 20;
 
-    // Tambahkan sisa baris (yang sudah berisi header per grup)
-    sheetInfo.rowsForSheet.forEach((rowData, rowIndex) => {
+    sheetInfo.rowsForSheet.forEach((rowData, rowIndexInSheet) => {
+      // rowIndexInSheet adalah index setelah baris periode
+      const actualRowIndex = rowIndexInSheet + 2; // +1 untuk baris periode, +1 karena addRow berikutnya
       const rowWithNAOrEmpty = rowData.map((cell) => (cell === null || typeof cell === "undefined" ? "" : cell));
-      const addedRowCurrent = worksheet.addRow(rowWithNAOrEmpty); // Baris data dimulai dari baris ke-2 di worksheet
+      const addedRow = worksheet.addRow(rowWithNAOrEmpty);
 
-      // Set nilai header secara eksplisit jika itu baris header pertama dari blok
       if (rowData[0] === "SUPPLIER" && rowData[1] === "HS CODE") {
-        // Cek jika ini baris header pertama
+        // Ini adalah baris header pertama dari blok
         let colIdx = 1;
         rowData.forEach((headerText) => {
           if (headerText !== null && typeof headerText !== "undefined") {
-            addedRowCurrent.getCell(colIdx).value = headerText;
+            addedRow.getCell(colIdx).value = headerText;
           }
           colIdx++;
         });
@@ -163,30 +159,82 @@ async function writeOutputToFile(workbookData, outputFileName = "summary_output.
       if (rowNumber === 1) return; // Lewati baris judul periode untuk alignment default
       row.eachCell({ includeEmpty: true }, function (cell, colNumber) {
         cell.alignment = { vertical: "middle", horizontal: "center" };
+        // Tambahkan border ke semua sel data dan header grup
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
       });
     });
 
-    let currentSheetRow = 2; // Mulai setelah baris judul periode
+    let currentSheetRowForMerge = 2; // Mulai setelah baris judul periode
     for (const groupMeta of sheetInfo.supplierGroupsMeta) {
-      const headerStartRow = currentSheetRow;
+      const headerStartRow = currentSheetRowForMerge;
       const dataStartRow = headerStartRow + groupMeta.headerRowCount;
       const productRows = groupMeta.productRowCount;
 
-      // Merge Header Grup
-      worksheet.mergeCells(headerStartRow, 1, headerStartRow + 1, 1); // Supplier
-      worksheet.mergeCells(headerStartRow, 2, headerStartRow + 1, 2); // HS CODE
-      worksheet.mergeCells(headerStartRow, 3, headerStartRow + 1, 3); // ITEM
-      worksheet.mergeCells(headerStartRow, 4, headerStartRow + 1, 4); // GSM
-      worksheet.mergeCells(headerStartRow, 5, headerStartRow + 1, 5); // ADD ON
+      // Styling Header Grup
+      const header1 = worksheet.getRow(headerStartRow);
+      const header2 = worksheet.getRow(headerStartRow + 1);
+      [header1, header2].forEach((r) => (r.font = { bold: true, color: { argb: colors.textWhite } }));
 
-      let startHeaderMonthCol = 6;
-      for (let i = 0; i < MONTH_ORDER.length; i++) {
-        worksheet.mergeCells(headerStartRow, startHeaderMonthCol, headerStartRow, startHeaderMonthCol + 1);
-        startHeaderMonthCol += 2;
+      // Kolom A-E (Supplier s/d Add On)
+      for (let c = 1; c <= 5; c++) {
+        header1.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.supplierCols } };
+        header2.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.supplierCols } };
       }
-      worksheet.mergeCells(headerStartRow, startHeaderMonthCol, headerStartRow, startHeaderMonthCol + 2);
+      worksheet.mergeCells(headerStartRow, 1, headerStartRow + 1, 1);
+      worksheet.mergeCells(headerStartRow, 2, headerStartRow + 1, 2);
+      worksheet.mergeCells(headerStartRow, 3, headerStartRow + 1, 3);
+      worksheet.mergeCells(headerStartRow, 4, headerStartRow + 1, 4);
+      worksheet.mergeCells(headerStartRow, 5, headerStartRow + 1, 5);
 
-      // Merge Kolom Supplier Vertikal untuk data produk
+      let currentColForColor = 6;
+      // Q1 (Jan-Mar) - 6 kolom
+      for (let i = 0; i < 3; i++) {
+        worksheet.mergeCells(headerStartRow, currentColForColor, headerStartRow, currentColForColor + 1);
+        header1.getCell(currentColForColor).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.q1 } };
+        header1.getCell(currentColForColor + 1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.q1 } }; // Untuk sel yang di-merge
+        header2.getCell(currentColForColor).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.q1 } };
+        header2.getCell(currentColForColor + 1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.q1 } };
+        currentColForColor += 2;
+      }
+      // Q2 (Apr-Jun) - 6 kolom
+      for (let i = 0; i < 3; i++) {
+        worksheet.mergeCells(headerStartRow, currentColForColor, headerStartRow, currentColForColor + 1);
+        header1.getCell(currentColForColor).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.q2 } };
+        header1.getCell(currentColForColor + 1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.q2 } };
+        header2.getCell(currentColForColor).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.q2 } };
+        header2.getCell(currentColForColor + 1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.q2 } };
+        currentColForColor += 2;
+      }
+      // Q3 (Jul-Sep) - 6 kolom
+      for (let i = 0; i < 3; i++) {
+        worksheet.mergeCells(headerStartRow, currentColForColor, headerStartRow, currentColForColor + 1);
+        header1.getCell(currentColForColor).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.q3 } };
+        header1.getCell(currentColForColor + 1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.q3 } };
+        header2.getCell(currentColForColor).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.q3 } };
+        header2.getCell(currentColForColor + 1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.q3 } };
+        currentColForColor += 2;
+      }
+      // Q4 (Okt-Des) - 6 kolom
+      for (let i = 0; i < 3; i++) {
+        worksheet.mergeCells(headerStartRow, currentColForColor, headerStartRow, currentColForColor + 1);
+        header1.getCell(currentColForColor).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.q4 } };
+        header1.getCell(currentColForColor + 1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.q4 } };
+        header2.getCell(currentColForColor).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.q4 } };
+        header2.getCell(currentColForColor + 1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.q4 } };
+        currentColForColor += 2;
+      }
+      // RECAP - 3 kolom
+      worksheet.mergeCells(headerStartRow, currentColForColor, headerStartRow, currentColForColor + 2);
+      for (let i = 0; i < 3; i++) {
+        header1.getCell(currentColForColor + i).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.recap } };
+        header2.getCell(currentColForColor + i).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.recap } };
+      }
+
       if (productRows > 0) {
         worksheet.mergeCells(dataStartRow, 1, dataStartRow + productRows - 1, 1);
       }
@@ -215,13 +263,7 @@ async function writeOutputToFile(workbookData, outputFileName = "summary_output.
         worksheet.mergeCells(totalQtyPerMoRowIndexForGroup, recapStartColIndex, quartalRowIndexForGroup, recapStartColIndex + 2);
         worksheet.getCell(totalQtyPerMoRowIndexForGroup, recapStartColIndex).font = { bold: true };
       }
-
-      // Styling header grup
-      [worksheet.getRow(headerStartRow), worksheet.getRow(headerStartRow + 1)].forEach((row) => {
-        row.font = { bold: true };
-      });
-
-      currentSheetRow += groupMeta.headerRowCount + productRows + (productRows > 0 ? 2 : 0) + (groupMeta.hasFollowingGroup ? 1 : 0);
+      currentSheetRowForMerge += groupMeta.headerRowCount + productRows + (productRows > 0 ? 2 : 0) + (groupMeta.hasFollowingGroup ? 1 : 0);
     }
   }
 
@@ -233,4 +275,4 @@ async function writeOutputToFile(workbookData, outputFileName = "summary_output.
   }
 }
 
-module.exports = { prepareGroupBlock, writeOutputToFile }; // Ganti nama fungsi
+module.exports = { prepareGroupBlock, writeOutputToFile };
