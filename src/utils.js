@@ -36,9 +36,29 @@ function parseNumber(value) {
     return isNaN(value) ? 0 : value;
   }
   if (typeof value === "string") {
-    const cleanedValue = value.replace(/\./g, "").replace(",", ".");
-    const num = parseFloat(cleanedValue);
-    return isNaN(num) ? 0 : num;
+    // Hilangkan semua spasi untuk menghindari kesalahan parsing
+    const cleanedValue = value.trim();
+
+    // Deteksi apakah ini format desimal Eropa (koma) atau Inggris (titik)
+    const commaCount = (cleanedValue.match(/,/g) || []).length;
+    const dotCount = (cleanedValue.match(/\./g) || []).length;
+
+    // Jika ada koma dan titik, prioritaskan tanda desimal yang lebih umum (koma untuk Eropa)
+    if (commaCount === 1 && dotCount === 0) {
+      // Format Eropa, ganti koma dengan titik
+      return parseFloat(cleanedValue.replace(",", "."));
+    } else if (dotCount === 1 && commaCount === 0) {
+      // Format Inggris, langsung parse
+      return parseFloat(cleanedValue);
+    } else if (commaCount > 1) {
+      // Format Eropa dengan ribuan dan desimal
+      const normalized = cleanedValue.replace(/\./g, "").replace(",", ".");
+      return parseFloat(normalized);
+    } else if (dotCount > 1) {
+      // Format Inggris dengan ribuan
+      const normalized = cleanedValue.replace(/,/g, "");
+      return parseFloat(normalized);
+    }
   }
   return 0;
 }
