@@ -6,7 +6,7 @@ const fs = require("fs");
 
 const DEFAULT_OUTPUT_FOLDER = "processed_excel";
 
-// Fungsi prepareGroupBlock tetap sama seperti respons sebelumnya
+// Fungsi prepareGroupBlock tetap sama
 function prepareGroupBlock(groupName, summaryLvl1Data, summaryLvl2Data) {
   const groupBlockRows = [];
   const headerRowCount = 2;
@@ -54,7 +54,7 @@ function prepareGroupBlock(groupName, summaryLvl1Data, summaryLvl2Data) {
       const monthData = summaryLvl1Data.find((d) => d.hsCode === combo.hsCode && d.item === combo.item && d.gsm === combo.gsm && d.addOn === combo.addOn && d.month === month);
       if (monthData) {
         dataRow.push(parseFloat(monthData.avgPrice.toFixed(2)));
-        const qty = Math.round(monthData.totalQty);
+        const qty = Math.round(monthData.totalQty); // Bulatkan qty di sini
         dataRow.push(qty);
         monthlyTotals[monthIndex] += qty;
       } else {
@@ -65,7 +65,7 @@ function prepareGroupBlock(groupName, summaryLvl1Data, summaryLvl2Data) {
     if (recapData) {
       dataRow.push(parseFloat(recapData.avgOfSummaryPrice.toFixed(2)));
       dataRow.push("N/A");
-      dataRow.push(Math.round(recapData.totalOfSummaryQty));
+      dataRow.push(Math.round(recapData.totalOfSummaryQty)); // Bulatkan recap qty
     } else {
       dataRow.push("N/A", "N/A", "N/A");
     }
@@ -77,9 +77,9 @@ function prepareGroupBlock(groupName, summaryLvl1Data, summaryLvl2Data) {
   if (distinctCombinations.length > 0) {
     const totalQtyPerMoRow = ["TOTAL QTY PER MO", null, null, null, null];
     monthlyTotals.forEach((total) => {
-      totalQtyPerMoRow.push(total, null);
-    });
-    totalQtyPerMoRow.push(overallTotalQtyForThisGroup, null, null);
+      totalQtyPerMoRow.push(Math.round(total), null);
+    }); // Bulatkan
+    totalQtyPerMoRow.push(Math.round(overallTotalQtyForThisGroup), null, null); // Bulatkan
     groupBlockRows.push(totalQtyPerMoRow);
 
     const quarterlyTotals = [0, 0, 0, 0];
@@ -90,17 +90,17 @@ function prepareGroupBlock(groupName, summaryLvl1Data, summaryLvl2Data) {
       else quarterlyTotals[3] += total;
     });
     const totalQtyPerQuartalRow = ["TOTAL QTY PER QUARTAL", null, null, null, null];
-    totalQtyPerQuartalRow.push(quarterlyTotals[0], null, null, null, null, null);
-    totalQtyPerQuartalRow.push(quarterlyTotals[1], null, null, null, null, null);
-    totalQtyPerQuartalRow.push(quarterlyTotals[2], null, null, null, null, null);
-    totalQtyPerQuartalRow.push(quarterlyTotals[3], null, null, null, null, null);
+    totalQtyPerQuartalRow.push(Math.round(quarterlyTotals[0]), null, null, null, null, null); // Bulatkan
+    totalQtyPerQuartalRow.push(Math.round(quarterlyTotals[1]), null, null, null, null, null); // Bulatkan
+    totalQtyPerQuartalRow.push(Math.round(quarterlyTotals[2]), null, null, null, null, null); // Bulatkan
+    totalQtyPerQuartalRow.push(Math.round(quarterlyTotals[3]), null, null, null, null, null); // Bulatkan
     totalQtyPerQuartalRow.push(null, null, null);
     groupBlockRows.push(totalQtyPerQuartalRow);
   }
 
   return {
     groupBlockRows: groupBlockRows,
-    overallTotalQtyForGroup: overallTotalQtyForThisGroup,
+    overallTotalQtyForGroup: overallTotalQtyForThisGroup, // Ini sudah dibulatkan karena berasal dari monthlyTotals
     distinctCombinationsCount: distinctCombinations.length,
     headerRowCount: headerRowCount,
     header1Length: headerRow1.length,
@@ -138,8 +138,10 @@ async function writeOutputToFile(workbookData, outputFileName = "summary_output.
     worksheet.getRow(1).height = 20;
 
     sheetInfo.allRowsForSheetContent.forEach((rowData, rowIndexInContent) => {
+      const actualRowInExcel = rowIndexInContent + 2;
       const rowWithNAOrEmpty = rowData.map((cell) => (cell === null || typeof cell === "undefined" ? "" : cell));
       const addedRow = worksheet.addRow(rowWithNAOrEmpty);
+
       if (rowData.length > 1 && rowData[0] === "SUPPLIER" && rowData[1] === "HS CODE") {
         let colIdx = 1;
         rowData.forEach((headerText) => {
@@ -152,7 +154,7 @@ async function writeOutputToFile(workbookData, outputFileName = "summary_output.
     });
 
     worksheet.eachRow({ includeEmpty: true }, function (row, rowNumber) {
-      if (rowNumber === 1) return;
+      if (rowNumber === 1) return; // Skip period title row for default border/alignment
       row.eachCell({ includeEmpty: true }, function (cell, colNumber) {
         cell.alignment = { vertical: "middle", horizontal: "center" };
         cell.border = {
@@ -172,7 +174,11 @@ async function writeOutputToFile(workbookData, outputFileName = "summary_output.
 
       const header1 = worksheet.getRow(headerStartRow);
       const header2 = worksheet.getRow(headerStartRow + 1);
-      [header1, header2].forEach((r) => (r.font = { bold: true, color: { argb: colors.textWhite } }));
+      [header1, header2].forEach((r) => {
+        r.font = { bold: true, color: { argb: colors.textWhite } };
+        r.eachCell((c) => (c.alignment = { vertical: "middle", horizontal: "center" }));
+      });
+
       for (let c = 1; c <= 5; c++) {
         header1.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.supplierCols } };
         header2.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.supplierCols } };
@@ -184,7 +190,6 @@ async function writeOutputToFile(workbookData, outputFileName = "summary_output.
       worksheet.mergeCells(headerStartRow, 5, headerStartRow + 1, 5);
 
       let currentColForColor = 6;
-      // REVISI: Gunakan objek colors langsung
       const quarterBgColors = [colors.q1, colors.q2, colors.q3, colors.q4];
       for (let q = 0; q < 4; q++) {
         const qBgColor = quarterBgColors[q];
@@ -210,7 +215,6 @@ async function writeOutputToFile(workbookData, outputFileName = "summary_output.
 
       if (productRows > 0) {
         worksheet.mergeCells(dataStartRow, 1, dataStartRow + productRows - 1, 1);
-        worksheet.getCell(dataStartRow, 1).alignment = { vertical: "middle", horizontal: "center" }; // Pastikan alignment untuk sel merge supplier
 
         const totalQtyPerMoRowIndexForGroup = dataStartRow + productRows;
         const quartalRowIndexForGroup = totalQtyPerMoRowIndexForGroup + 1;
@@ -244,7 +248,7 @@ async function writeOutputToFile(workbookData, outputFileName = "summary_output.
     let itemTableMainTitleActualIndex = -1;
     let itemTableHeaderMonthActualIndex = -1;
 
-    for (let i = currentSheetRowForBlocks; i <= worksheet.rowCount; i++) {
+    for (let i = 2; i <= worksheet.rowCount; i++) {
       const cellAValue = worksheet.getRow(i).getCell(1).value ? String(worksheet.getRow(i).getCell(1).value) : "";
       if (cellAValue === "Month" && totalAllHeaderMonthActualIndex === -1) {
         const nextRowCellA = worksheet.getRow(i + 1).getCell(1).value ? String(worksheet.getRow(i + 1).getCell(1).value) : "";
@@ -265,7 +269,6 @@ async function writeOutputToFile(workbookData, outputFileName = "summary_output.
       worksheet.mergeCells(totalAllHeaderMonthActualIndex, 1, totalAllHeaderMonthActualIndex, 5);
       thmRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.supplierCols } };
       let col = 6;
-      // REVISI: Gunakan objek colors langsung
       const quarterBgColorsTAS = [colors.q1, colors.q2, colors.q3, colors.q4];
       for (let q = 0; q < 4; q++) {
         const qBgColor = quarterBgColorsTAS[q];
@@ -313,7 +316,6 @@ async function writeOutputToFile(workbookData, outputFileName = "summary_output.
           worksheet.getCell(r, recapStartColTAS + cOffset).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.recap } };
         }
       }
-      // Pastikan nilai ada di sel kiri atas dan alignment-nya
       mergedRecapTASCell.alignment = { vertical: "middle", horizontal: "center" };
     }
 
@@ -329,7 +331,6 @@ async function writeOutputToFile(workbookData, outputFileName = "summary_output.
       worksheet.mergeCells(itemTableHeaderMonthActualIndex, 1, itemTableHeaderMonthActualIndex, 5);
       itemHeaderMonthRowActual.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.supplierCols } };
       let col = 6;
-      // REVISI: Gunakan objek colors langsung
       const quarterBgColorsTPI = [colors.q1, colors.q2, colors.q3, colors.q4];
       for (let q = 0; q < 4; q++) {
         const qBgColor = quarterBgColorsTPI[q];
@@ -351,15 +352,29 @@ async function writeOutputToFile(workbookData, outputFileName = "summary_output.
       let currentItemRow = itemTableHeaderMonthActualIndex + 1;
       while (currentItemRow <= worksheet.rowCount) {
         const firstCell = worksheet.getRow(currentItemRow).getCell(1);
-        if (!firstCell.value || String(firstCell.value).trim() === "") break;
-
-        worksheet.mergeCells(currentItemRow, 1, currentItemRow, 5);
-        let itemMonthlyCol = 6;
-        for (let i = 0; i < MONTH_ORDER.length; i++) {
-          worksheet.mergeCells(currentItemRow, itemMonthlyCol, currentItemRow, itemMonthlyCol + 1);
-          itemMonthlyCol += 2;
+        // Periksa apakah baris ini adalah baris data item atau baris kosong/label lain
+        if (
+          !firstCell.value ||
+          String(firstCell.value).trim() === "" ||
+          String(firstCell.value).startsWith("TOTAL ALL SUPPLIER") ||
+          String(firstCell.value).startsWith("Month") ||
+          String(firstCell.value).startsWith("TOTAL QTY PER MO") || // dari blok supplier
+          String(firstCell.value).startsWith("TOTAL QTY PER QUARTAL") // dari blok supplier
+        ) {
+          // Jika bukan baris data item yang valid, kemungkinan sudah akhir tabel item
+          if (String(firstCell.value).trim() !== "") {
+            // Jika bukan baris kosong pemisah
+            break;
+          }
+        } else {
+          worksheet.mergeCells(currentItemRow, 1, currentItemRow, 5);
+          let itemMonthlyCol = 6;
+          for (let i = 0; i < MONTH_ORDER.length; i++) {
+            worksheet.mergeCells(currentItemRow, itemMonthlyCol, currentItemRow, itemMonthlyCol + 1);
+            itemMonthlyCol += 2;
+          }
+          worksheet.mergeCells(currentItemRow, itemMonthlyCol, currentItemRow, itemMonthlyCol + 2);
         }
-        worksheet.mergeCells(currentItemRow, itemMonthlyCol, currentItemRow, itemMonthlyCol + 2);
         currentItemRow++;
       }
     }

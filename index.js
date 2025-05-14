@@ -74,7 +74,10 @@ async function main() {
         summaryLvl1.forEach((lvl1Row) => {
           const monthIndex = MONTH_ORDER.indexOf(lvl1Row.month);
           if (monthIndex !== -1) {
-            sheetOverallMonthlyTotals[monthIndex] += lvl1Row.totalQty;
+            // Pastikan lvl1Row.totalQty adalah angka sebelum menambahkannya
+            const qtyToAdd = typeof lvl1Row.totalQty === "number" && !isNaN(lvl1Row.totalQty) ? lvl1Row.totalQty : 0;
+            sheetOverallMonthlyTotals[monthIndex] += qtyToAdd;
+
             const itemKey = `${lvl1Row.item}-${lvl1Row.gsm}-${lvl1Row.addOn}`;
             if (!itemSummaryDataForSheet[itemKey]) {
               itemSummaryDataForSheet[itemKey] = {
@@ -85,8 +88,8 @@ async function main() {
                 totalQtyRecap: 0,
               };
             }
-            itemSummaryDataForSheet[itemKey].monthlyQtys[monthIndex] += lvl1Row.totalQty;
-            itemSummaryDataForSheet[itemKey].totalQtyRecap += lvl1Row.totalQty;
+            itemSummaryDataForSheet[itemKey].monthlyQtys[monthIndex] += qtyToAdd;
+            itemSummaryDataForSheet[itemKey].totalQtyRecap += qtyToAdd;
           }
         });
 
@@ -107,9 +110,9 @@ async function main() {
       const grandTotalAllSuppliers = sheetOverallMonthlyTotals.reduce((sum, qty) => sum + qty, 0);
       const totalAllMoRow = ["TOTAL ALL SUPPLIER PER MO", null, null, null, null];
       sheetOverallMonthlyTotals.forEach((total) => {
-        totalAllMoRow.push(total, null);
+        totalAllMoRow.push(Math.round(total), null); // Bulatkan total QTY bulanan
       });
-      totalAllMoRow.push(grandTotalAllSuppliers, null, null);
+      totalAllMoRow.push(Math.round(grandTotalAllSuppliers), null, null);
       allRowsForThisSheetContent.push(totalAllMoRow);
 
       const quarterlyTotalsAll = [0, 0, 0, 0];
@@ -120,16 +123,16 @@ async function main() {
         else quarterlyTotalsAll[3] += total;
       });
       const totalAllQuartalRow = ["TOTAL ALL SUPPLIER PER QUARTAL", null, null, null, null];
-      totalAllQuartalRow.push(quarterlyTotalsAll[0], null, null, null, null, null);
-      totalAllQuartalRow.push(quarterlyTotalsAll[1], null, null, null, null, null);
-      totalAllQuartalRow.push(quarterlyTotalsAll[2], null, null, null, null, null);
-      totalAllQuartalRow.push(quarterlyTotalsAll[3], null, null, null, null, null);
+      totalAllQuartalRow.push(Math.round(quarterlyTotalsAll[0]), null, null, null, null, null);
+      totalAllQuartalRow.push(Math.round(quarterlyTotalsAll[1]), null, null, null, null, null);
+      totalAllQuartalRow.push(Math.round(quarterlyTotalsAll[2]), null, null, null, null, null);
+      totalAllQuartalRow.push(Math.round(quarterlyTotalsAll[3]), null, null, null, null, null);
       totalAllQuartalRow.push(null, null, null);
       allRowsForThisSheetContent.push(totalAllQuartalRow);
 
       allRowsForThisSheetContent.push([]);
       // Baris Judul Utama untuk Tabel "TOTAL PER ITEM"
-      const itemTableMainTitleRow = ["TOTAL PER ITEM"]; // Hanya satu sel untuk di-merge full
+      const itemTableMainTitleRow = ["TOTAL PER ITEM"];
       allRowsForThisSheetContent.push(itemTableMainTitleRow);
 
       // Baris Header Bulan untuk Tabel "TOTAL PER ITEM"
@@ -143,8 +146,8 @@ async function main() {
         .forEach((itemKey) => {
           const itemData = itemSummaryDataForSheet[itemKey];
           const itemRow = [`${itemData.item} ${itemData.gsm} ${itemData.addOn}`, null, null, null, null];
-          itemData.monthlyQtys.forEach((qty) => itemRow.push(qty, null));
-          itemRow.push(itemData.totalQtyRecap, null, null);
+          itemData.monthlyQtys.forEach((qty) => itemRow.push(Math.round(qty), null)); // Bulatkan QTY bulanan item
+          itemRow.push(Math.round(itemData.totalQtyRecap), null, null); // Bulatkan total QTY rekap item
           allRowsForThisSheetContent.push(itemRow);
         });
 
@@ -158,7 +161,6 @@ async function main() {
     return null;
   }
 
-  // ... (sisa kode main() untuk memproses importer kosong dan valid, sama seperti sebelumnya) ...
   if (dataWithBlankOrNAImporter.length > 0) {
     const blankImporterSheetNameInput = readlineSync.question("Masukkan nama sheet untuk data tanpa Importer (default: Data_Tanpa_Importer): ").trim() || "Data_Tanpa_Importer";
     const sheetName = blankImporterSheetNameInput.substring(0, 30).replace(/[\*\?\:\\\/\[\]]/g, "_");
