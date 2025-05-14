@@ -1,13 +1,13 @@
 // src/outputFormatter.js
-const { MONTH_ORDER } = require("./utils");
+const { MONTH_ORDER } = require("./utils"); // Pastikan utils.js ada jika dibutuhkan
 const ExcelJS = require("exceljs");
 const path = require("path");
 const fs = require("fs");
 
 const DEFAULT_OUTPUT_FOLDER = "processed_excel";
 
-// Fungsi prepareGroupBlock tetap sama
-function prepareGroupBlock(groupName, summaryLvl1Data, summaryLvl2Data) {
+// --- MODIFIKASI: Tambahkan parameter incotermValue ---
+function prepareGroupBlock(groupName, summaryLvl1Data, summaryLvl2Data, incotermValue) {
   const groupBlockRows = [];
   const headerRowCount = 2;
 
@@ -64,9 +64,16 @@ function prepareGroupBlock(groupName, summaryLvl1Data, summaryLvl2Data) {
     const recapData = summaryLvl2Data.find((d) => d.hsCode === combo.hsCode && d.item === combo.item && d.gsm === combo.gsm && d.addOn === combo.addOn);
     if (recapData) {
       dataRow.push(parseFloat(recapData.avgOfSummaryPrice.toFixed(2)));
-      dataRow.push("N/A");
+      // --- MODIFIKASI: Gunakan incotermValue ---
+      dataRow.push(incotermValue);
+      // --- AKHIR MODIFIKASI ---
       dataRow.push(Math.round(recapData.totalOfSummaryQty));
     } else {
+      // Jika tidak ada recapData, berarti tidak ada data untuk baris ini, sehingga kolom recap juga N/A
+      // incotermValue di sini bisa juga dimasukkan jika diinginkan, tapi secara logika jika avg price dan total qty N/A, incotermnya juga tidak relevan
+      // Namun, jika Anda ingin incoterm tetap muncul meskipun AVG PRICE dan TOTAL QTY N/A (meski ini aneh):
+      // dataRow.push("N/A", incotermValue, "N/A");
+      // Untuk saat ini, kita asumsikan jika recapData tidak ada, semua kolom recap N/A
       dataRow.push("N/A", "N/A", "N/A");
     }
     groupBlockRows.push(dataRow);
@@ -106,6 +113,12 @@ function prepareGroupBlock(groupName, summaryLvl1Data, summaryLvl2Data) {
     header1Length: headerRow1.length,
   };
 }
+// --- AKHIR MODIFIKASI ---
+
+// ... (sisa kode writeOutputToFile tetap sama, tidak perlu diubah karena ia hanya menulis apa yang sudah disiapkan)
+// Pastikan MONTH_ORDER didefinisikan di ./src/utils.js atau di sini jika tidak ada file utils
+// Contoh jika utils.js tidak ada:
+// const MONTH_ORDER = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 
 async function writeOutputToFile(workbookData, outputFileName = "summary_output.xlsx", periodYear) {
   if (!fs.existsSync(DEFAULT_OUTPUT_FOLDER)) {
@@ -264,7 +277,6 @@ async function writeOutputToFile(workbookData, outputFileName = "summary_output.
       }
     }
 
-    // REVISI: Definisi recapStartColTAS di sini agar bisa diakses
     const recapStartColTAS = 5 + MONTH_ORDER.length * 2 + 1;
 
     if (totalAllHeaderMonthActualIndex !== -1) {
@@ -298,7 +310,6 @@ async function writeOutputToFile(workbookData, outputFileName = "summary_output.
         worksheet.mergeCells(totalAllMoRowActualIndex, col, totalAllMoRowActualIndex, col + 1);
         col += 2;
       }
-      // Pewarnaan baris "TOTAL ALL SUPPLIER PER MO" sampai RECAP
       for (let c = 1; c <= recapStartColTAS + 2; c++) {
         tamRow.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.period } };
       }
@@ -311,7 +322,6 @@ async function writeOutputToFile(workbookData, outputFileName = "summary_output.
         worksheet.mergeCells(totalAllQuartalRowActualIndex, col, totalAllQuartalRowActualIndex, col + 5);
         col += 6;
       }
-      // Pewarnaan baris "TOTAL ALL SUPPLIER PER QUARTAL" sampai RECAP
       for (let c = 1; c <= recapStartColTAS + 2; c++) {
         taqRow.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.period } };
       }
@@ -320,7 +330,6 @@ async function writeOutputToFile(workbookData, outputFileName = "summary_output.
       worksheet.mergeCells(totalAllMoRowActualIndex, recapStartColTAS, totalAllQuartalRowActualIndex, recapStartColTAS + 2);
       const mergedRecapTASCell = worksheet.getCell(totalAllMoRowActualIndex, recapStartColTAS);
       mergedRecapTASCell.font = { bold: true, color: { argb: colors.textWhite } };
-      // Warna latar sudah diatur per baris, jadi tidak perlu override fill di sini KECUALI jika ingin warna recap biru
       mergedRecapTASCell.alignment = { vertical: "middle", horizontal: "center" };
     }
 

@@ -1,6 +1,6 @@
 // index.js
 const readlineSync = require("readline-sync");
-const { MONTH_ORDER } = require("./src/utils");
+const { MONTH_ORDER } = require("./src/utils"); // Pastikan utils.js ada jika dibutuhkan
 const { readAndPreprocessData } = require("./src/excelReader");
 const { performAggregation } = require("./src/aggregator");
 const { prepareGroupBlock, writeOutputToFile } = require("./src/outputFormatter");
@@ -15,6 +15,10 @@ async function main() {
   const inputFile = readlineSync.question(`Masukkan nama file Excel input (default: ${DEFAULT_INPUT_FILENAME}): `) || DEFAULT_INPUT_FILENAME;
   const sheetName = readlineSync.question(`Masukkan nama sheet yang akan diproses (default: ${DEFAULT_SHEET_NAME}): `) || DEFAULT_SHEET_NAME;
   const periodYear = readlineSync.question(`Masukkan tahun periode (misal, 2024): `) || new Date().getFullYear();
+  // --- TAMBAHAN: Input INCOTERM dari pengguna ---
+  const incotermUserInput = readlineSync.question(`Masukkan nilai INCOTERM untuk kolom RECAP (misal, FOB, CIF, EXW, dll.): `).trim();
+  const globalIncoterm = incotermUserInput || "N/A"; // Jika kosong, default ke N/A
+  // --- AKHIR TAMBAHAN ---
 
   let allRawData = readAndPreprocessData(inputFile, sheetName);
 
@@ -37,8 +41,9 @@ async function main() {
     }
   });
 
-  function processSheetData(dataToProcessForSheet, sheetBaseName) {
-    console.log(`\nMemproses data untuk sheet berbasis "${sheetBaseName}"...`);
+  // --- MODIFIKASI: Tambahkan parameter incotermValue ---
+  function processSheetData(dataToProcessForSheet, sheetBaseName, incotermValue) {
+    console.log(`\nMemproses data untuk sheet berbasis "${sheetBaseName}" dengan INCOTERM: ${incotermValue}...`);
 
     const groupedBySupplierOrOrigin = {};
     dataToProcessForSheet.forEach((row) => {
@@ -61,7 +66,8 @@ async function main() {
       const { summaryLvl1, summaryLvl2 } = performAggregation(groupData);
 
       if (summaryLvl2.length > 0) {
-        const groupBlock = prepareGroupBlock(groupName, summaryLvl1, summaryLvl2);
+        // --- MODIFIKASI: Teruskan incotermValue ke prepareGroupBlock ---
+        const groupBlock = prepareGroupBlock(groupName, summaryLvl1, summaryLvl2, incotermValue);
         allRowsForThisSheetContent.push(...groupBlock.groupBlockRows);
 
         supplierGroupsMeta.push({
@@ -74,7 +80,6 @@ async function main() {
         summaryLvl1.forEach((lvl1Row) => {
           const monthIndex = MONTH_ORDER.indexOf(lvl1Row.month);
           if (monthIndex !== -1) {
-            // Pastikan lvl1Row.totalQty adalah angka sebelum menambahkannya
             const qtyToAdd = typeof lvl1Row.totalQty === "number" && !isNaN(lvl1Row.totalQty) ? lvl1Row.totalQty : 0;
             sheetOverallMonthlyTotals[monthIndex] += qtyToAdd;
 
@@ -110,7 +115,7 @@ async function main() {
       const grandTotalAllSuppliers = sheetOverallMonthlyTotals.reduce((sum, qty) => sum + qty, 0);
       const totalAllMoRow = ["TOTAL ALL SUPPLIER PER MO", null, null, null, null];
       sheetOverallMonthlyTotals.forEach((total) => {
-        totalAllMoRow.push(Math.round(total), null); // Bulatkan total QTY bulanan
+        totalAllMoRow.push(Math.round(total), null);
       });
       totalAllMoRow.push(Math.round(grandTotalAllSuppliers), null, null);
       allRowsForThisSheetContent.push(totalAllMoRow);
@@ -131,11 +136,9 @@ async function main() {
       allRowsForThisSheetContent.push(totalAllQuartalRow);
 
       allRowsForThisSheetContent.push([]);
-      // Baris Judul Utama untuk Tabel "TOTAL PER ITEM"
       const itemTableMainTitleRow = ["TOTAL PER ITEM"];
       allRowsForThisSheetContent.push(itemTableMainTitleRow);
 
-      // Baris Header Bulan untuk Tabel "TOTAL PER ITEM"
       const itemTableHeaderMonthRow = ["Month", null, null, null, null];
       MONTH_ORDER.forEach((m) => itemTableHeaderMonthRow.push(m, null));
       itemTableHeaderMonthRow.push("RECAP", null, null);
@@ -146,8 +149,8 @@ async function main() {
         .forEach((itemKey) => {
           const itemData = itemSummaryDataForSheet[itemKey];
           const itemRow = [`${itemData.item} ${itemData.gsm} ${itemData.addOn}`, null, null, null, null];
-          itemData.monthlyQtys.forEach((qty) => itemRow.push(Math.round(qty), null)); // Bulatkan QTY bulanan item
-          itemRow.push(Math.round(itemData.totalQtyRecap), null, null); // Bulatkan total QTY rekap item
+          itemData.monthlyQtys.forEach((qty) => itemRow.push(Math.round(qty), null));
+          itemRow.push(Math.round(itemData.totalQtyRecap), null, null);
           allRowsForThisSheetContent.push(itemRow);
         });
 
@@ -160,16 +163,18 @@ async function main() {
     }
     return null;
   }
+  // --- AKHIR MODIFIKASI ---
 
   if (dataWithBlankOrNAImporter.length > 0) {
     const blankImporterSheetNameInput = readlineSync.question("Masukkan nama sheet untuk data tanpa Importer (default: Data_Tanpa_Importer): ").trim() || "Data_Tanpa_Importer";
-    const sheetName = blankImporterSheetNameInput.substring(0, 30).replace(/[\*\?\:\\\/\[\]]/g, "_");
-    const sheetResult = processSheetData(dataWithBlankOrNAImporter, sheetName);
+    const sheetNameForBlank = blankImporterSheetNameInput.substring(0, 30).replace(/[\*\?\:\\\/\[\]]/g, "_");
+    // --- MODIFIKASI: Teruskan globalIncoterm ---
+    const sheetResult = processSheetData(dataWithBlankOrNAImporter, sheetNameForBlank, globalIncoterm);
     if (sheetResult) {
       workbookDataForExcelJS.push(sheetResult);
-      console.log(`    Data untuk sheet "${sheetName}" telah disiapkan.`);
+      console.log(`    Data untuk sheet "${sheetNameForBlank}" telah disiapkan.`);
     } else {
-      console.log(`    Tidak ada data summary yang signifikan untuk data tanpa Importer untuk dimasukkan ke sheet "${sheetName}".`);
+      console.log(`    Tidak ada data summary yang signifikan untuk data tanpa Importer untuk dimasukkan ke sheet "${sheetNameForBlank}".`);
     }
   } else {
     console.log("Tidak ada data dengan Importer kosong atau N/A.");
@@ -183,7 +188,8 @@ async function main() {
     if (importerData.length === 0) continue;
 
     let baseSheetName = importer.replace(/[\*\?\:\\\/\[\]]/g, "_").substring(0, 30);
-    const sheetResult = processSheetData(importerData, baseSheetName);
+    // --- MODIFIKASI: Teruskan globalIncoterm ---
+    const sheetResult = processSheetData(importerData, baseSheetName, globalIncoterm);
 
     if (sheetResult) {
       let N = 0;
