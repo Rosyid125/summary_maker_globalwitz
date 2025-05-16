@@ -7,30 +7,70 @@ const { MONTH_ORDER, getMonthName, parseNumber } = require("./utils");
 const DEFAULT_INPUT_FOLDER = "original_excel";
 const DEFAULT_SHEET_NAME = "DATA OLAH";
 
+// function parseDate_DDMMYYYY(dateString) {
+//   if (typeof dateString !== "string") return null;
+//   const parts = dateString.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
+//   if (!parts) return null;
+
+//   const day = parseInt(parts[1], 10);
+//   const month = parseInt(parts[2], 10);
+//   let year = parseInt(parts[3], 10);
+
+//   if (year < 100) {
+//     year += year > 50 ? 1900 : 2000;
+//   }
+
+//   if (isNaN(day) || isNaN(month) || isNaN(year) || month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+//   try {
+//     const dateObj = new Date(year, month - 1, day);
+//     if (dateObj.getFullYear() === year && dateObj.getMonth() === month - 1 && dateObj.getDate() === day) {
+//       return dateObj;
+//     }
+//     return null;
+//   } catch (e) {
+//     return null;
+//   }
+// }
+
 function parseDate_DDMMYYYY(dateString) {
   if (typeof dateString !== "string") return null;
-  const parts = dateString.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
-  if (!parts) return null;
 
-  const day = parseInt(parts[1], 10);
-  const month = parseInt(parts[2], 10);
-  let year = parseInt(parts[3], 10);
+  // Format DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY (STANDAR IMPORT INDOENESIA)
+  let parts = dateString.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
+  if (parts) {
+    const day = parseInt(parts[1], 10);
+    const month = parseInt(parts[2], 10);
+    let year = parseInt(parts[3], 10);
 
-  if (year < 100) {
-    year += year > 50 ? 1900 : 2000;
-  }
-
-  if (isNaN(day) || isNaN(month) || isNaN(year) || month < 1 || month > 12 || day < 1 || day > 31) return null;
-
-  try {
-    const dateObj = new Date(year, month - 1, day);
-    if (dateObj.getFullYear() === year && dateObj.getMonth() === month - 1 && dateObj.getDate() === day) {
-      return dateObj;
+    if (year < 100) {
+      year += year > 50 ? 1900 : 2000;
     }
-    return null;
-  } catch (e) {
-    return null;
+
+    if (!isNaN(day) && !isNaN(month) && !isNaN(year) && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      const dateObj = new Date(year, month - 1, day);
+      if (dateObj.getFullYear() === year && dateObj.getMonth() === month - 1 && dateObj.getDate() === day) {
+        return dateObj;
+      }
+    }
   }
+
+  // Format YYYY-MM-DD (KHUSUS UNTUK IMPORT VIETNAM)
+  parts = dateString.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (parts) {
+    const year = parseInt(parts[1], 10);
+    const month = parseInt(parts[2], 10);
+    const day = parseInt(parts[3], 10);
+
+    if (!isNaN(year) && !isNaN(month) && !isNaN(day) && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      const dateObj = new Date(year, month - 1, day);
+      if (dateObj.getFullYear() === year && dateObj.getMonth() === month - 1 && dateObj.getDate() === day) {
+        return dateObj;
+      }
+    }
+  }
+
+  return null;
 }
 
 function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess = DEFAULT_SHEET_NAME) {
