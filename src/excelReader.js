@@ -122,15 +122,15 @@ function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess 
       return {
         month: month,
         hsCode: String(row["HS CODE"] || "-").trim(), // HS Code tetap '-' jika kosong
-        itemDesc: getItemValue(row["ITEM DESC"]), // Gunakan fungsi helper untuk ITEM DESC juga
+        itemDesc: getItemValue(row["ITEM DESC"] || row["PRODUCT DESCRIPTION(EN)"]), // Gunakan fungsi helper untuk ITEM DESC juga
         gsm: getItemValue(row["GSM"]),
         item: getItemValue(row["ITEM"]),
         addOn: getItemValue(row["ADD ON"]),
-        importer: String(row["IMPORTER"] || "").trim(), // String kosong jika tidak ada, ditangani di index.js
+        importer: String(row["IMPORTER"] || row["PURCHASER"] || "").trim(), // String kosong jika tidak ada, ditangani di index.js // Support indonesia dan vietnam dan thailand
         supplier: String(row["SUPPLIER"] || "").trim(), // String kosong jika tidak ada, ditangani di index.js
         originCountry: String(row["ORIGIN COUNTRY"] || "-").trim(),
-        usdQtyUnit: parseNumber(row["CIF KG Unit In USD"] || row["USD Qty Unit"]),
-        qty: parseNumber(row["Net KG Wt"] || row["qty"]),
+        usdQtyUnit: parseNumber(row["CIF KG Unit In USD"] || row["USD Qty Unit"] || row["UNIT PRICE(USD)"]), // Support indonesia dan vietnam dan thailand
+        qty: parseNumber(row["Net KG Wt"] || row["qty"] || row["BUSINESS QUANTITY (KG)"]), // Support indonesia dan vietnam dan thailand
       };
     });
   } catch (error) {
