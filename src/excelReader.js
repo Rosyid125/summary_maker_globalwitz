@@ -53,7 +53,7 @@ function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess 
 
     return jsonData.map((row, rowIndex) => {
       const dateValue = row["DATE"];
-      let month = "N/A";
+      let month = "-";
 
       if (dateValue !== null && typeof dateValue !== "undefined") {
         let parsedDateObj = null;
@@ -72,23 +72,23 @@ function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess 
         }
       }
 
-      // if (month === 'N/A' && dateValue) {
+      // if (month === '-' && dateValue) {
       //     console.warn(`Baris ${rowIndex + 2}: Tidak dapat memparsing DATE "${dateValue}" menjadi bulan (format diharapkan dd/mm/yyyy).`);
       // }
 
-      // REVISI: Normalisasi ITEM, GSM, ADD ON ke "N/A" jika kosong
-      const getItemValue = (val) => (val === null || typeof val === "undefined" || String(val).trim() === "" ? "N/A" : String(val).trim());
+      // REVISI: Normalisasi ITEM, GSM, ADD ON ke "-" jika kosong
+      const getItemValue = (val) => (val === null || typeof val === "undefined" || String(val).trim() === "" ? "-" : String(val).trim());
 
       return {
         month: month,
-        hsCode: String(row["HS CODE"] || "N/A").trim(), // HS Code tetap 'N/A' jika kosong
+        hsCode: String(row["HS CODE"] || "-").trim(), // HS Code tetap '-' jika kosong
         itemDesc: getItemValue(row["ITEM DESC"]), // Gunakan fungsi helper untuk ITEM DESC juga
         gsm: getItemValue(row["GSM"]),
         item: getItemValue(row["ITEM"]),
         addOn: getItemValue(row["ADD ON"]),
         importer: String(row["IMPORTER"] || "").trim(), // String kosong jika tidak ada, ditangani di index.js
         supplier: String(row["SUPPLIER"] || "").trim(), // String kosong jika tidak ada, ditangani di index.js
-        originCountry: String(row["ORIGIN COUNTRY"] || "N/A").trim(),
+        originCountry: String(row["ORIGIN COUNTRY"] || "-").trim(),
         usdQtyUnit: parseNumber(row["CIF KG Unit In USD"] || row["USD Qty Unit"]),
         qty: parseNumber(row["Net KG Wt"] || row["qty"]),
       };

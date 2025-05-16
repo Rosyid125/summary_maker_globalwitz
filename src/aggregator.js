@@ -7,14 +7,14 @@ function performAggregation(data) {
 
   data.forEach((row, index) => {
     // Kolom yang WAJIB ada: month, hsCode.
-    // Kolom gsm, item, addOn bisa 'N/A' atau string kosong dan itu dianggap nilai valid untuk pengelompokan.
-    if (!row.month || row.month === "N/A" || !row.hsCode || row.hsCode === "N/A") {
+    // Kolom gsm, item, addOn bisa '-' atau string kosong dan itu dianggap nilai valid untuk pengelompokan.
+    if (!row.month || row.month === "-" || !row.hsCode || row.hsCode === "-") {
       // console.warn(`Aggregator: Baris ${index} dilewati karena bulan atau HS Code tidak valid:`, row);
       return;
     }
 
     // Jika GSM, ITEM, atau ADD ON tidak ada (null/undefined), kita anggap sebagai string kosong agar tetap bisa dikelompokkan.
-    // Jika nilainya adalah string "N/A", itu akan diperlakukan sebagai nilai "N/A" yang unik.
+    // Jika nilainya adalah string "-", itu akan diperlakukan sebagai nilai "-" yang unik.
     const gsmValue = row.gsm || ""; // Jika null/undefined, jadikan string kosong
     const itemValue = row.item || ""; // Jika null/undefined, jadikan string kosong
     const addOnValue = row.addOn || ""; // Jika null/undefined, jadikan string kosong

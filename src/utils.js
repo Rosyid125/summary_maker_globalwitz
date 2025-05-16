@@ -36,33 +36,36 @@ function parseNumber(value) {
     return isNaN(value) ? 0 : value;
   }
   if (typeof value === "string") {
-    // Hilangkan semua spasi untuk menghindari kesalahan parsing
     const cleanedValue = value.trim();
+    if (cleanedValue === "") return 0; // Handle empty string explicitly
 
-    // Deteksi apakah ini format desimal Eropa (koma) atau Inggris (titik)
-    const commaCount = (cleanedValue.match(/,/g) || []).length;
-    const dotCount = (cleanedValue.match(/\./g) || []).length;
+    // Regex untuk mendeteksi format angka:
+    // 1. Angka dengan koma sebagai desimal, titik sebagai ribuan (opsional)
+    //    Contoh: "1.234,56", "123,45"
+    const europeanRegex = /^-?\d{1,3}(\.\d{3})*(,\d+)?$/;
+    // 2. Angka dengan titik sebagai desimal, koma sebagai ribuan (opsional)
+    //    Contoh: "1,234.56", "123.45"
+    const americanRegex = /^-?\d{1,3}(,\d{3})*(\.\d+)?$/;
 
-    // Jika ada koma dan titik, prioritaskan tanda desimal yang lebih umum (koma untuk Eropa)
-    if (commaCount === 1 && dotCount === 0) {
-      // Format Eropa, ganti koma dengan titik
-      return parseFloat(cleanedValue.replace(",", "."));
-    } else if (dotCount === 1 && commaCount === 0) {
-      // Format Inggris, langsung parse
-      return parseFloat(cleanedValue);
-    } else if (commaCount > 1) {
-      // Format Eropa dengan ribuan dan desimal
-      const normalized = cleanedValue.replace(/\./g, "").replace(",", ".");
-      return parseFloat(normalized);
-    } else if (dotCount > 1) {
-      // Format Inggris dengan ribuan
-      const normalized = cleanedValue.replace(/,/g, "");
-      return parseFloat(normalized);
+    let numStr = cleanedValue;
+
+    if (europeanRegex.test(numStr)) {
+      // Format Eropa: hapus titik (pemisah ribuan), ganti koma (desimal) dengan titik
+      numStr = numStr.replace(/\./g, "").replace(",", ".");
+    } else if (americanRegex.test(numStr)) {
+      // Format Amerika: hapus koma (pemisah ribuan)
+      numStr = numStr.replace(/,/g, "");
     }
+    // Jika tidak cocok regex di atas, coba parse langsung
+    // Ini akan menangani angka tanpa pemisah ribuan, atau jika formatnya sudah sesuai float
+
+    const num = parseFloat(numStr);
+    return isNaN(num) ? 0 : num;
   }
-  return 0;
+  return 0; // Default jika bukan angka atau string yang bisa diparsing
 }
 
+// ... (averageGreaterThanZero tetap sama) ...
 function averageGreaterThanZero(arr) {
   const filteredArr = arr.filter((num) => typeof num === "number" && num > 0);
   if (filteredArr.length === 0) {
@@ -75,6 +78,6 @@ module.exports = {
   MONTH_ORDER,
   excelSerialNumberToDate,
   getMonthName,
-  parseNumber,
+  parseNumber, // Pastikan fungsi yang diperbarui diekspor
   averageGreaterThanZero,
 };

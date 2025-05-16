@@ -115,9 +115,9 @@ async function main() {
       const grandTotalAllSuppliers = sheetOverallMonthlyTotals.reduce((sum, qty) => sum + qty, 0);
       const totalAllMoRow = ["TOTAL ALL SUPPLIER PER MO", null, null, null, null];
       sheetOverallMonthlyTotals.forEach((total) => {
-        totalAllMoRow.push(Math.round(total), null);
+        totalAllMoRow.push(total, null); // DIHAPUS: Math.round(total)
       });
-      totalAllMoRow.push(Math.round(grandTotalAllSuppliers), null, null);
+      totalAllMoRow.push(grandTotalAllSuppliers, null, null); // DIHAPUS: Math.round(grandTotalAllSuppliers)
       allRowsForThisSheetContent.push(totalAllMoRow);
 
       const quarterlyTotalsAll = [0, 0, 0, 0];
@@ -128,10 +128,11 @@ async function main() {
         else quarterlyTotalsAll[3] += total;
       });
       const totalAllQuartalRow = ["TOTAL ALL SUPPLIER PER QUARTAL", null, null, null, null];
-      totalAllQuartalRow.push(Math.round(quarterlyTotalsAll[0]), null, null, null, null, null);
-      totalAllQuartalRow.push(Math.round(quarterlyTotalsAll[1]), null, null, null, null, null);
-      totalAllQuartalRow.push(Math.round(quarterlyTotalsAll[2]), null, null, null, null, null);
-      totalAllQuartalRow.push(Math.round(quarterlyTotalsAll[3]), null, null, null, null, null);
+      // DIHAPUS: Math.round() untuk setiap quarterlyTotalsAll
+      totalAllQuartalRow.push(quarterlyTotalsAll[0], null, null, null, null, null);
+      totalAllQuartalRow.push(quarterlyTotalsAll[1], null, null, null, null, null);
+      totalAllQuartalRow.push(quarterlyTotalsAll[2], null, null, null, null, null);
+      totalAllQuartalRow.push(quarterlyTotalsAll[3], null, null, null, null, null);
       totalAllQuartalRow.push(null, null, null);
       allRowsForThisSheetContent.push(totalAllQuartalRow);
 
@@ -149,8 +150,8 @@ async function main() {
         .forEach((itemKey) => {
           const itemData = itemSummaryDataForSheet[itemKey];
           const itemRow = [`${itemData.item} ${itemData.gsm} ${itemData.addOn}`, null, null, null, null];
-          itemData.monthlyQtys.forEach((qty) => itemRow.push(Math.round(qty), null));
-          itemRow.push(Math.round(itemData.totalQtyRecap), null, null);
+          itemData.monthlyQtys.forEach((qty) => itemRow.push(qty, null)); // DIHAPUS: Math.round(qty)
+          itemRow.push(itemData.totalQtyRecap, null, null); // DIHAPUS: Math.round(itemData.totalQtyRecap)
           allRowsForThisSheetContent.push(itemRow);
         });
 
@@ -177,7 +178,7 @@ async function main() {
       console.log(`    Tidak ada data summary yang signifikan untuk data tanpa Importer untuk dimasukkan ke sheet "${sheetNameForBlank}".`);
     }
   } else {
-    console.log("Tidak ada data dengan Importer kosong atau N/A.");
+    console.log("Tidak ada data dengan Importer kosong atau -.");
   }
 
   const uniqueImporters = [...new Set(dataWithValidImporter.map((row) => row.importer))].sort();

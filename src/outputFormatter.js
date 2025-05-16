@@ -13,6 +13,7 @@ function prepareGroupBlock(groupName, summaryLvl1Data, summaryLvl2Data, incoterm
 
   const headerRow1 = ["SUPPLIER", "HS CODE", "ITEM", "GSM", "ADD ON"];
   const headerRow2 = [null, null, null, null, null];
+
   MONTH_ORDER.forEach((month) => {
     headerRow1.push(month, null);
     headerRow2.push("PRICE", "QTY");
@@ -53,54 +54,50 @@ function prepareGroupBlock(groupName, summaryLvl1Data, summaryLvl2Data, incoterm
     MONTH_ORDER.forEach((month, monthIndex) => {
       const monthData = summaryLvl1Data.find((d) => d.hsCode === combo.hsCode && d.item === combo.item && d.gsm === combo.gsm && d.addOn === combo.addOn && d.month === month);
       if (monthData) {
-        dataRow.push(parseFloat(monthData.avgPrice.toFixed(2)));
-        const qty = Math.round(monthData.totalQty);
+        dataRow.push(parseFloat(monthData.avgPrice.toFixed(2))); // Harga (avgPrice) bisa tetap 2 desimal
+        const qty = monthData.totalQty; // DIHAPUS: Math.round()
         dataRow.push(qty);
-        monthlyTotals[monthIndex] += qty;
+        monthlyTotals[monthIndex] += qty; // Pastikan qty di sini adalah angka
       } else {
-        dataRow.push("N/A", "N/A");
+        dataRow.push("-", "-");
       }
     });
     const recapData = summaryLvl2Data.find((d) => d.hsCode === combo.hsCode && d.item === combo.item && d.gsm === combo.gsm && d.addOn === combo.addOn);
     if (recapData) {
-      dataRow.push(parseFloat(recapData.avgOfSummaryPrice.toFixed(2)));
-      // --- MODIFIKASI: Gunakan incotermValue ---
+      dataRow.push(parseFloat(recapData.avgOfSummaryPrice.toFixed(2))); // Harga (avgOfSummaryPrice) bisa tetap 2 desimal
       dataRow.push(incotermValue);
-      // --- AKHIR MODIFIKASI ---
-      dataRow.push(Math.round(recapData.totalOfSummaryQty));
+      dataRow.push(recapData.totalOfSummaryQty); // DIHAPUS: Math.round()
     } else {
-      // Jika tidak ada recapData, berarti tidak ada data untuk baris ini, sehingga kolom recap juga N/A
-      // incotermValue di sini bisa juga dimasukkan jika diinginkan, tapi secara logika jika avg price dan total qty N/A, incotermnya juga tidak relevan
-      // Namun, jika Anda ingin incoterm tetap muncul meskipun AVG PRICE dan TOTAL QTY N/A (meski ini aneh):
-      // dataRow.push("N/A", incotermValue, "N/A");
-      // Untuk saat ini, kita asumsikan jika recapData tidak ada, semua kolom recap N/A
-      dataRow.push("N/A", "N/A", "N/A");
+      dataRow.push("-", "-", "-");
     }
     groupBlockRows.push(dataRow);
   });
 
-  const overallTotalQtyForThisGroup = monthlyTotals.reduce((sum, qty) => sum + qty, 0);
+  // Pastikan qty adalah angka saat menjumlahkan, meskipun seharusnya sudah angka dari aggregator
+  const overallTotalQtyForThisGroup = monthlyTotals.reduce((sum, qty) => sum + (typeof qty === "number" && !isNaN(qty) ? qty : 0), 0);
 
   if (distinctCombinations.length > 0) {
     const totalQtyPerMoRow = ["TOTAL QTY PER MO", null, null, null, null];
     monthlyTotals.forEach((total) => {
-      totalQtyPerMoRow.push(Math.round(total), null);
+      totalQtyPerMoRow.push(total, null); // DIHAPUS: Math.round(total)
     });
-    totalQtyPerMoRow.push(Math.round(overallTotalQtyForThisGroup), null, null);
+    totalQtyPerMoRow.push(overallTotalQtyForThisGroup, null, null); // DIHAPUS: Math.round(overallTotalQtyForThisGroup)
     groupBlockRows.push(totalQtyPerMoRow);
 
     const quarterlyTotals = [0, 0, 0, 0];
     monthlyTotals.forEach((total, index) => {
-      if (index < 3) quarterlyTotals[0] += total;
-      else if (index < 6) quarterlyTotals[1] += total;
-      else if (index < 9) quarterlyTotals[2] += total;
-      else quarterlyTotals[3] += total;
+      const numTotal = typeof total === "number" && !isNaN(total) ? total : 0;
+      if (index < 3) quarterlyTotals[0] += numTotal;
+      else if (index < 6) quarterlyTotals[1] += numTotal;
+      else if (index < 9) quarterlyTotals[2] += numTotal;
+      else quarterlyTotals[3] += numTotal;
     });
     const totalQtyPerQuartalRow = ["TOTAL QTY PER QUARTAL", null, null, null, null];
-    totalQtyPerQuartalRow.push(Math.round(quarterlyTotals[0]), null, null, null, null, null);
-    totalQtyPerQuartalRow.push(Math.round(quarterlyTotals[1]), null, null, null, null, null);
-    totalQtyPerQuartalRow.push(Math.round(quarterlyTotals[2]), null, null, null, null, null);
-    totalQtyPerQuartalRow.push(Math.round(quarterlyTotals[3]), null, null, null, null, null);
+    // DIHAPUS: Math.round() untuk setiap quarterlyTotals
+    totalQtyPerQuartalRow.push(quarterlyTotals[0], null, null, null, null, null);
+    totalQtyPerQuartalRow.push(quarterlyTotals[1], null, null, null, null, null);
+    totalQtyPerQuartalRow.push(quarterlyTotals[2], null, null, null, null, null);
+    totalQtyPerQuartalRow.push(quarterlyTotals[3], null, null, null, null, null);
     totalQtyPerQuartalRow.push(null, null, null);
     groupBlockRows.push(totalQtyPerQuartalRow);
   }
@@ -113,7 +110,6 @@ function prepareGroupBlock(groupName, summaryLvl1Data, summaryLvl2Data, incoterm
     header1Length: headerRow1.length,
   };
 }
-// --- AKHIR MODIFIKASI ---
 
 // ... (sisa kode writeOutputToFile tetap sama, tidak perlu diubah karena ia hanya menulis apa yang sudah disiapkan)
 // Pastikan MONTH_ORDER didefinisikan di ./src/utils.js atau di sini jika tidak ada file utils
