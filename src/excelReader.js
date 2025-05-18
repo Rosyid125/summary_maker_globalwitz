@@ -92,7 +92,7 @@ function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess 
     console.log(`Membaca ${jsonData.length} baris dari sheet "${sheetNameToProcess}"...`);
 
     return jsonData.map((row, rowIndex) => {
-      const dateValue = row["DATE"];
+      const dateValue = row["DATE"] || row["CUSTOMS CLEARANCE DATE"];
       let month = "-";
 
       if (dateValue !== null && typeof dateValue !== "undefined") {
