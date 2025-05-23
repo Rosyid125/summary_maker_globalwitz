@@ -1,5 +1,6 @@
 // src/aggregator.js
 const { averageGreaterThanZero } = require("./utils");
+const logger = require("./logger");
 
 function performAggregation(data) {
   const monthlySummary = {};
@@ -21,6 +22,11 @@ function performAggregation(data) {
 
     const key = `${row.month}-${row.hsCode}-${itemValue}-${gsmValue}-${addOnValue}`;
     // console.log(`Aggregator: Membuat kunci: ${key} untuk baris:`, row);
+
+    // // --- TAMBAHKAN LOG INI ---
+    // if (row.hsCode === "56031200" && row.month === "Feb") {
+    //   logger.debug(`Input untuk ${key}: importer = ${row.importer}, usdQtyUnit = ${row.usdQtyUnit}, qty = ${row.qty}`);
+    // }
 
     if (!monthlySummary[key]) {
       monthlySummary[key] = {
