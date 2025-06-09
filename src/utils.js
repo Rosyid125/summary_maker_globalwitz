@@ -37,32 +37,28 @@ function parseNumber(value) {
   }
   if (typeof value === "string") {
     const cleanedValue = value.trim();
-    if (cleanedValue === "") return 0; // Handle empty string explicitly
+    if (cleanedValue === "") return 0;
+
+    // Jika hanya ada titik dan tidak ada koma, anggap titik sebagai desimal
+    if (/^\d+\.\d+$/.test(cleanedValue) && cleanedValue.indexOf(",") === -1) {
+      return parseFloat(cleanedValue);
+    }
 
     // Regex untuk mendeteksi format angka:
-    // 1. Angka dengan koma sebagai desimal, titik sebagai ribuan (opsional)
-    //    Contoh: "1.234,56", "123,45"
     const europeanRegex = /^-?\d{1,3}(\.\d{3})*(,\d+)?$/;
-    // 2. Angka dengan titik sebagai desimal, koma sebagai ribuan (opsional)
-    //    Contoh: "1,234.56", "123.45"
     const americanRegex = /^-?\d{1,3}(,\d{3})*(\.\d+)?$/;
 
     let numStr = cleanedValue;
 
     if (europeanRegex.test(numStr)) {
-      // Format Eropa: hapus titik (pemisah ribuan), ganti koma (desimal) dengan titik
       numStr = numStr.replace(/\./g, "").replace(",", ".");
     } else if (americanRegex.test(numStr)) {
-      // Format Amerika: hapus koma (pemisah ribuan)
       numStr = numStr.replace(/,/g, "");
     }
-    // Jika tidak cocok regex di atas, coba parse langsung
-    // Ini akan menangani angka tanpa pemisah ribuan, atau jika formatnya sudah sesuai float
-
     const num = parseFloat(numStr);
     return isNaN(num) ? 0 : num;
   }
-  return 0; // Default jika bukan angka atau string yang bisa diparsing
+  return 0;
 }
 
 // ... (averageGreaterThanZero tetap sama) ...
