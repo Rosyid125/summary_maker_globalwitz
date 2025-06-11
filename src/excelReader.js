@@ -121,7 +121,7 @@ function parseDate(dateString, dateFormat = 'DD/MM/YYYY') {
   }
 }
 
-function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess = DEFAULT_SHEET_NAME, dateFormat = 'DD/MM/YYYY', numberFormat = 'EUROPEAN') {
+function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess = DEFAULT_SHEET_NAME, dateFormat = 'DD/MM/YYYY', numberFormat = 'EUROPEAN', columnMapping = {}) {
   const inputFile = path.join(DEFAULT_INPUT_FOLDER, inputFileName);
   if (!fs.existsSync(inputFile)) {
     console.error(`Error: File input "${inputFile}" tidak ditemukan.`);
@@ -139,8 +139,23 @@ function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess 
 
     console.log(`Membaca ${jsonData.length} baris dari sheet "${sheetNameToProcess}" dengan format tanggal ${dateFormat} dan format angka ${numberFormat}...`);
 
+    // Helper function untuk mendapatkan nilai dari mapping kolom dengan fallback
+    const getColumnValue = (row, mappingKey, defaultColumns) => {
+      if (columnMapping[mappingKey] && columnMapping[mappingKey] !== "") {
+        return row[columnMapping[mappingKey]];
+      }
+      // Fallback ke default columns
+      for (const col of defaultColumns) {
+        if (row[col] !== undefined) {
+          return row[col];
+        }
+      }
+      return null;
+    };
+
     return jsonData.map((row, rowIndex) => {
-      const dateValue = row["DATE"] || row["CUSTOMS CLEARANCE DATE"];
+      // Ambil nilai date dengan mapping atau default
+      const dateValue = getColumnValue(row, 'date', ["DATE", "CUSTOMS CLEARANCE DATE"]);
       let month = "-";
 
       if (dateValue !== null && typeof dateValue !== "undefined") {
@@ -162,22 +177,21 @@ function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess 
 
       // if (month === '-' && dateValue) {
       //     console.warn(`Baris ${rowIndex + 2}: Tidak dapat memparsing DATE "${dateValue}" menjadi bulan (format diharapkan dd/mm/yyyy).`);
-      // }
-
-      // REVISI: Normalisasi ITEM, GSM, ADD ON ke "-" jika kosong
+      // }      // REVISI: Normalisasi ITEM, GSM, ADD ON ke "-" jika kosong
       const getItemValue = (val) => (val === null || typeof val === "undefined" || String(val).trim() === "" ? "-" : String(val).trim());
 
       return {
         month: month,
-        hsCode: String(row["HS CODE"] || "-").trim(), // HS Code tetap '-' jika kosong
-        itemDesc: getItemValue(row["ITEM DESC"] || row["PRODUCT DESCRIPTION(EN)"]), // Gunakan fungsi helper untuk ITEM DESC juga
-        gsm: getItemValue(row["GSM"]),
-        item: getItemValue(row["ITEM"]),
-        addOn: getItemValue(row["ADD ON"]),
-        importer: String(row["IMPORTER"] || row["PURCHASER"] || "").trim(), // String kosong jika tidak ada, ditangani di index.js // Support indonesia dan vietnam dan thailand
-        supplier: String(row["SUPPLIER"] || "").trim(), // String kosong jika tidak ada, ditangani di index.js
-        originCountry: String(row["ORIGIN COUNTRY"] || "-").trim(),        usdQtyUnit: parseNumber(row["CIF KG Unit In USD"] || row["USD Qty Unit"] || row["UNIT PRICE(USD)"], numberFormat), // Support indonesia dan vietnam dan thailand
-        qty: parseNumber(row["Net KG Wt"] || row["qty"] || row["BUSINESS QUANTITY (KG)"], numberFormat), // Support indonesia dan vietnam dan thailand
+        hsCode: String(getColumnValue(row, 'hsCode', ["HS CODE"]) || "-").trim(),
+        itemDesc: getItemValue(getColumnValue(row, 'itemDesc', ["ITEM DESC", "PRODUCT DESCRIPTION(EN)"])),
+        gsm: getItemValue(getColumnValue(row, 'gsm', ["GSM"])),
+        item: getItemValue(getColumnValue(row, 'item', ["ITEM"])),
+        addOn: getItemValue(getColumnValue(row, 'addOn', ["ADD ON"])),
+        importer: String(getColumnValue(row, 'importer', ["IMPORTER", "PURCHASER"]) || "").trim(),
+        supplier: String(getColumnValue(row, 'supplier', ["SUPPLIER"]) || "").trim(),
+        originCountry: String(getColumnValue(row, 'originCountry', ["ORIGIN COUNTRY"]) || "-").trim(),
+        usdQtyUnit: parseNumber(getColumnValue(row, 'unitPrice', ["CIF KG Unit In USD", "USD Qty Unit", "UNIT PRICE(USD)"]), numberFormat),
+        qty: parseNumber(getColumnValue(row, 'quantity', ["Net KG Wt", "qty", "BUSINESS QUANTITY (KG)"]), numberFormat),
       };
     });
   } catch (error) {

@@ -31,13 +31,34 @@ async function main() {
   const numberFormat = numberFormatChoice === "2" ? "AMERICAN" : "EUROPEAN";
   console.log(`Format angka yang dipilih: ${numberFormat === "EUROPEAN" ? "Koma sebagai desimal (1.234,56)" : "Titik sebagai desimal (1,234.56)"}\n`);
   
+  // Mapping kolom Excel
+  console.log("=== MAPPING KOLOM EXCEL ===");
+  console.log("Masukkan nama kolom pada Excel sesuai dengan data Anda:");
+  console.log("(Tekan Enter untuk menggunakan default, atau tulis nama kolom yang sesuai)\n");
+  
+  const columnMapping = {
+    date: readlineSync.question(`Nama kolom untuk TANGGAL (default: "DATE" atau "CUSTOMS CLEARANCE DATE"): `).trim() || "",
+    hsCode: readlineSync.question(`Nama kolom untuk HS CODE (default: "HS CODE"): `).trim() || "HS CODE",
+    itemDesc: readlineSync.question(`Nama kolom untuk DESKRIPSI ITEM (default: "ITEM DESC" atau "PRODUCT DESCRIPTION(EN)"): `).trim() || "",
+    gsm: readlineSync.question(`Nama kolom untuk GSM (default: "GSM"): `).trim() || "GSM",
+    item: readlineSync.question(`Nama kolom untuk ITEM (default: "ITEM"): `).trim() || "ITEM",
+    addOn: readlineSync.question(`Nama kolom untuk ADD ON (default: "ADD ON"): `).trim() || "ADD ON",
+    importer: readlineSync.question(`Nama kolom untuk IMPORTER (default: "IMPORTER" atau "PURCHASER"): `).trim() || "",
+    supplier: readlineSync.question(`Nama kolom untuk SUPPLIER (default: "SUPPLIER"): `).trim() || "SUPPLIER",
+    originCountry: readlineSync.question(`Nama kolom untuk ORIGIN COUNTRY (default: "ORIGIN COUNTRY"): `).trim() || "ORIGIN COUNTRY",
+    unitPrice: readlineSync.question(`Nama kolom untuk UNIT PRICE USD (default: "CIF KG Unit In USD", "USD Qty Unit", atau "UNIT PRICE(USD)"): `).trim() || "",
+    quantity: readlineSync.question(`Nama kolom untuk QUANTITY KG (default: "Net KG Wt", "qty", atau "BUSINESS QUANTITY (KG)"): `).trim() || ""
+  };
+  
+  console.log("\n=== MAPPING SELESAI ===\n");
+  
   const periodYear = readlineSync.question(`Masukkan tahun periode (misal, 2024): `) || new Date().getFullYear();
   // --- TAMBAHAN: Input INCOTERM dari pengguna ---
   const incotermUserInput = readlineSync.question(`Masukkan nilai INCOTERM untuk kolom RECAP (misal, FOB, CIF, EXW, dll.): `).trim();
   const globalIncoterm = incotermUserInput || "N/A"; // Jika kosong, default ke N/A
   // --- AKHIR TAMBAHAN ---
 
-  let allRawData = readAndPreprocessData(inputFile, sheetName, dateFormat, numberFormat);
+  let allRawData = readAndPreprocessData(inputFile, sheetName, dateFormat, numberFormat, columnMapping);
 
   if (!allRawData || allRawData.length === 0) {
     console.log("Tidak ada data untuk diproses atau terjadi error saat membaca file.");
