@@ -62,7 +62,7 @@ function parseNumber(value, numberFormat = 'EUROPEAN') {
     const num = parseFloat(numStr);
     return isNaN(num) ? 0 : num;
   }
-  return 0; // Default jika bukan angka atau string yang bisa diparsing
+  return 0;
 }
 
 // ... (averageGreaterThanZero tetap sama) ...
