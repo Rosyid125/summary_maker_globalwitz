@@ -14,13 +14,30 @@ async function main() {
 
   const inputFile = readlineSync.question(`Masukkan nama file Excel input (default: ${DEFAULT_INPUT_FILENAME}): `) || DEFAULT_INPUT_FILENAME;
   const sheetName = readlineSync.question(`Masukkan nama sheet yang akan diproses (default: ${DEFAULT_SHEET_NAME}): `) || DEFAULT_SHEET_NAME;
+  
+  // Pilihan format tanggal
+  console.log("\nPilih format tanggal dalam Excel:");
+  console.log("1. DD/MM/YYYY (Indonesia - default)");
+  console.log("2. MM/DD/YYYY (USA/Global)");
+  const dateFormatChoice = readlineSync.question("Masukkan pilihan (1 atau 2, default: 1): ") || "1";
+  const dateFormat = dateFormatChoice === "2" ? "MM/DD/YYYY" : "DD/MM/YYYY";
+  console.log(`Format tanggal yang dipilih: ${dateFormat}\n`);
+  
+  // Pilihan format angka/desimal
+  console.log("Pilih format angka (desimal) dalam Excel:");
+  console.log("1. Koma sebagai desimal (1.234,56 - European/Indonesia - default)");
+  console.log("2. Titik sebagai desimal (1,234.56 - American/Global)");
+  const numberFormatChoice = readlineSync.question("Masukkan pilihan (1 atau 2, default: 1): ") || "1";
+  const numberFormat = numberFormatChoice === "2" ? "AMERICAN" : "EUROPEAN";
+  console.log(`Format angka yang dipilih: ${numberFormat === "EUROPEAN" ? "Koma sebagai desimal (1.234,56)" : "Titik sebagai desimal (1,234.56)"}\n`);
+  
   const periodYear = readlineSync.question(`Masukkan tahun periode (misal, 2024): `) || new Date().getFullYear();
   // --- TAMBAHAN: Input INCOTERM dari pengguna ---
   const incotermUserInput = readlineSync.question(`Masukkan nilai INCOTERM untuk kolom RECAP (misal, FOB, CIF, EXW, dll.): `).trim();
   const globalIncoterm = incotermUserInput || "N/A"; // Jika kosong, default ke N/A
   // --- AKHIR TAMBAHAN ---
 
-  let allRawData = readAndPreprocessData(inputFile, sheetName);
+  let allRawData = readAndPreprocessData(inputFile, sheetName, dateFormat, numberFormat);
 
   if (!allRawData || allRawData.length === 0) {
     console.log("Tidak ada data untuk diproses atau terjadi error saat membaca file.");

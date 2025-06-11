@@ -31,7 +31,7 @@ function getMonthName(dateObj) {
   return MONTH_ORDER[dateObj.getMonth()];
 }
 
-function parseNumber(value) {
+function parseNumber(value, numberFormat = 'EUROPEAN') {
   if (typeof value === "number") {
     return isNaN(value) ? 0 : value;
   }
@@ -39,25 +39,25 @@ function parseNumber(value) {
     const cleanedValue = value.trim();
     if (cleanedValue === "") return 0; // Handle empty string explicitly
 
-    // Regex untuk mendeteksi format angka:
-    // 1. Angka dengan koma sebagai desimal, titik sebagai ribuan (opsional)
-    //    Contoh: "1.234,56", "123,45"
-    const europeanRegex = /^-?\d{1,3}(\.\d{3})*(,\d+)?$/;
-    // 2. Angka dengan titik sebagai desimal, koma sebagai ribuan (opsional)
-    //    Contoh: "1,234.56", "123.45"
-    const americanRegex = /^-?\d{1,3}(,\d{3})*(\.\d+)?$/;
-
     let numStr = cleanedValue;
 
-    if (europeanRegex.test(numStr)) {
-      // Format Eropa: hapus titik (pemisah ribuan), ganti koma (desimal) dengan titik
-      numStr = numStr.replace(/\./g, "").replace(",", ".");
-    } else if (americanRegex.test(numStr)) {
-      // Format Amerika: hapus koma (pemisah ribuan)
-      numStr = numStr.replace(/,/g, "");
+    if (numberFormat === 'AMERICAN') {
+      // Format Amerika: titik sebagai desimal, koma sebagai pemisah ribuan
+      // Contoh: "1,234.56", "123.45"
+      const americanRegex = /^-?\d{1,3}(,\d{3})*(\.\d+)?$/;
+      if (americanRegex.test(numStr)) {
+        // Hapus koma (pemisah ribuan)
+        numStr = numStr.replace(/,/g, "");
+      }
+    } else {
+      // Format Eropa (default): koma sebagai desimal, titik sebagai pemisah ribuan
+      // Contoh: "1.234,56", "123,45"
+      const europeanRegex = /^-?\d{1,3}(\.\d{3})*(,\d+)?$/;
+      if (europeanRegex.test(numStr)) {
+        // Hapus titik (pemisah ribuan), ganti koma (desimal) dengan titik
+        numStr = numStr.replace(/\./g, "").replace(",", ".");
+      }
     }
-    // Jika tidak cocok regex di atas, coba parse langsung
-    // Ini akan menangani angka tanpa pemisah ribuan, atau jika formatnya sudah sesuai float
 
     const num = parseFloat(numStr);
     return isNaN(num) ? 0 : num;

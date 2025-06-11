@@ -73,7 +73,55 @@ function parseDate_DDMMYYYY(dateString) {
   return null;
 }
 
-function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess = DEFAULT_SHEET_NAME) {
+function parseDate_MMDDYYYY(dateString) {
+  if (typeof dateString !== "string") return null;
+
+  // Format MM/DD/YYYY, MM-DD-YYYY, MM.DD.YYYY (STANDAR IMPORT USA/GLOBAL)
+  let parts = dateString.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
+  if (parts) {
+    const month = parseInt(parts[1], 10);
+    const day = parseInt(parts[2], 10);
+    let year = parseInt(parts[3], 10);
+
+    if (year < 100) {
+      year += year > 50 ? 1900 : 2000;
+    }
+
+    if (!isNaN(day) && !isNaN(month) && !isNaN(year) && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      const dateObj = new Date(year, month - 1, day);
+      if (dateObj.getFullYear() === year && dateObj.getMonth() === month - 1 && dateObj.getDate() === day) {
+        return dateObj;
+      }
+    }
+  }
+
+  // Format YYYY-MM-DD (STANDAR ISO)
+  parts = dateString.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (parts) {
+    const year = parseInt(parts[1], 10);
+    const month = parseInt(parts[2], 10);
+    const day = parseInt(parts[3], 10);
+
+    if (!isNaN(year) && !isNaN(month) && !isNaN(day) && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      const dateObj = new Date(year, month - 1, day);
+      if (dateObj.getFullYear() === year && dateObj.getMonth() === month - 1 && dateObj.getDate() === day) {
+        return dateObj;
+      }
+    }
+  }
+
+  return null;
+}
+
+function parseDate(dateString, dateFormat = 'DD/MM/YYYY') {
+  if (dateFormat === 'MM/DD/YYYY') {
+    return parseDate_MMDDYYYY(dateString);
+  } else {
+    return parseDate_DDMMYYYY(dateString);
+  }
+}
+
+function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess = DEFAULT_SHEET_NAME, dateFormat = 'DD/MM/YYYY', numberFormat = 'EUROPEAN') {
   const inputFile = path.join(DEFAULT_INPUT_FOLDER, inputFileName);
   if (!fs.existsSync(inputFile)) {
     console.error(`Error: File input "${inputFile}" tidak ditemukan.`);
@@ -89,7 +137,7 @@ function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess 
     const worksheet = workbook.Sheets[sheetNameToProcess];
     const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, defval: null });
 
-    console.log(`Membaca ${jsonData.length} baris dari sheet "${sheetNameToProcess}"...`);
+    console.log(`Membaca ${jsonData.length} baris dari sheet "${sheetNameToProcess}" dengan format tanggal ${dateFormat} dan format angka ${numberFormat}...`);
 
     return jsonData.map((row, rowIndex) => {
       const dateValue = row["DATE"] || row["CUSTOMS CLEARANCE DATE"];
@@ -98,7 +146,7 @@ function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess 
       if (dateValue !== null && typeof dateValue !== "undefined") {
         let parsedDateObj = null;
         if (typeof dateValue === "string") {
-          parsedDateObj = parseDate_DDMMYYYY(dateValue.trim());
+          parsedDateObj = parseDate(dateValue.trim(), dateFormat);
           if (!parsedDateObj && /^\d{6}$/.test(dateValue.trim())) {
             const year = parseInt(dateValue.substring(0, 4));
             const monthNum = parseInt(dateValue.substring(4, 6));
@@ -128,9 +176,8 @@ function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess 
         addOn: getItemValue(row["ADD ON"]),
         importer: String(row["IMPORTER"] || row["PURCHASER"] || "").trim(), // String kosong jika tidak ada, ditangani di index.js // Support indonesia dan vietnam dan thailand
         supplier: String(row["SUPPLIER"] || "").trim(), // String kosong jika tidak ada, ditangani di index.js
-        originCountry: String(row["ORIGIN COUNTRY"] || "-").trim(),
-        usdQtyUnit: parseNumber(row["CIF KG Unit In USD"] || row["USD Qty Unit"] || row["UNIT PRICE(USD)"]), // Support indonesia dan vietnam dan thailand
-        qty: parseNumber(row["Net KG Wt"] || row["qty"] || row["BUSINESS QUANTITY (KG)"]), // Support indonesia dan vietnam dan thailand
+        originCountry: String(row["ORIGIN COUNTRY"] || "-").trim(),        usdQtyUnit: parseNumber(row["CIF KG Unit In USD"] || row["USD Qty Unit"] || row["UNIT PRICE(USD)"], numberFormat), // Support indonesia dan vietnam dan thailand
+        qty: parseNumber(row["Net KG Wt"] || row["qty"] || row["BUSINESS QUANTITY (KG)"], numberFormat), // Support indonesia dan vietnam dan thailand
       };
     });
   } catch (error) {
