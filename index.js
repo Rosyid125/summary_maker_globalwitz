@@ -1,10 +1,12 @@
 // index.js
 const readlineSync = require("readline-sync");
+const path = require("path");
 const { MONTH_ORDER } = require("./src/utils"); // Pastikan utils.js ada jika dibutuhkan
-const { readAndPreprocessData } = require("./src/excelReader");
+const { readAndPreprocessData, getExcelInfo, getSheetColumnNames } = require("./src/excelReader");
 const { performAggregation } = require("./src/aggregator");
 const { prepareGroupBlock, writeOutputToFile } = require("./src/outputFormatter");
 
+const DEFAULT_INPUT_FOLDER = "original_excel";
 const DEFAULT_INPUT_FILENAME = "input.xlsx";
 const DEFAULT_OUTPUT_FILENAME = "summary_output.xlsx";
 const DEFAULT_SHEET_NAME = "DATA OLAH";
@@ -13,44 +15,123 @@ async function main() {
   console.log("Memulai proses pembuatan summary Excel...");
 
   const inputFile = readlineSync.question(`Masukkan nama file Excel input (default: ${DEFAULT_INPUT_FILENAME}): `) || DEFAULT_INPUT_FILENAME;
-  const sheetName = readlineSync.question(`Masukkan nama sheet yang akan diproses (default: ${DEFAULT_SHEET_NAME}): `) || DEFAULT_SHEET_NAME;
   
+  // Membaca informasi struktur Excel
+  console.log("\nMembaca struktur file Excel...");
+  const excelInfo = getExcelInfo(inputFile);
+  if (!excelInfo) {
+    console.log("Gagal membaca file Excel. Proses dihentikan.");
+    return;
+  }
+
+  // Pemilihan Sheet
+  console.log("\n=== PILIH SHEET ===");
+  console.log("Sheet yang tersedia:");
+  excelInfo.sheetNames.forEach((sheetName, index) => {
+    console.log(`${index + 1}. ${sheetName}`);
+  });
+  
+  const sheetChoice = readlineSync.question(`Pilih sheet (1-${excelInfo.sheetNames.length}, default: cari "${DEFAULT_SHEET_NAME}" atau pilih pertama): `);
+  let selectedSheet;
+  
+  if (sheetChoice && !isNaN(sheetChoice) && sheetChoice >= 1 && sheetChoice <= excelInfo.sheetNames.length) {
+    selectedSheet = excelInfo.sheetNames[sheetChoice - 1];
+  } else {
+    // Cari sheet default atau ambil yang pertama
+    selectedSheet = excelInfo.sheetNames.find(sheet => sheet === DEFAULT_SHEET_NAME) || excelInfo.sheetNames[0];
+  }
+  
+  console.log(`Sheet yang dipilih: "${selectedSheet}"\n`);
+
+  // Membaca kolom dari sheet yang dipilih
+  const columnNames = getSheetColumnNames(inputFile, selectedSheet);
+  if (columnNames.length === 0) {
+    console.log("Tidak ada kolom yang ditemukan di sheet tersebut. Proses dihentikan.");
+    return;
+  }
+
   // Pilihan format tanggal
-  console.log("\nPilih format tanggal dalam Excel:");
+  console.log("=== PILIH FORMAT TANGGAL ===");
   console.log("1. DD/MM/YYYY (Indonesia - default)");
   console.log("2. MM/DD/YYYY (USA/Global)");
-  const dateFormatChoice = readlineSync.question("Masukkan pilihan (1 atau 2, default: 1): ") || "1";
-  const dateFormat = dateFormatChoice === "2" ? "MM/DD/YYYY" : "DD/MM/YYYY";
+  console.log("3. DD-MONTH-YYYY (dengan nama bulan, contoh: 01-mei-2025, 25-jan-2025)");
+  console.log("\nCATATAN: Format Excel serial number (contoh: 45658) akan otomatis terdeteksi untuk semua pilihan di atas.");
+  const dateFormatChoice = readlineSync.question("Masukkan pilihan (1, 2, atau 3, default: 1): ") || "1";
+  
+  let dateFormat;
+  if (dateFormatChoice === "2") {
+    dateFormat = "MM/DD/YYYY";
+  } else if (dateFormatChoice === "3") {
+    dateFormat = "DD-MONTH-YYYY";
+  } else {
+    dateFormat = "DD/MM/YYYY";
+  }
+  
   console.log(`Format tanggal yang dipilih: ${dateFormat}\n`);
   
   // Pilihan format angka/desimal
-  console.log("Pilih format angka (desimal) dalam Excel:");
+  console.log("=== PILIH FORMAT ANGKA ===");
   console.log("1. Koma sebagai desimal (1.234,56 - European/Indonesia - default)");
   console.log("2. Titik sebagai desimal (1,234.56 - American/Global)");
   const numberFormatChoice = readlineSync.question("Masukkan pilihan (1 atau 2, default: 1): ") || "1";
   const numberFormat = numberFormatChoice === "2" ? "AMERICAN" : "EUROPEAN";
   console.log(`Format angka yang dipilih: ${numberFormat === "EUROPEAN" ? "Koma sebagai desimal (1.234,56)" : "Titik sebagai desimal (1,234.56)"}\n`);
   
-  // Mapping kolom Excel
-  console.log("=== MAPPING KOLOM EXCEL ===");
-  console.log("Masukkan nama kolom pada Excel sesuai dengan data Anda:");
-  console.log("(Tekan Enter untuk menggunakan default, atau tulis nama kolom yang sesuai)\n");
+  // Helper function untuk pemilihan kolom
+  function selectColumn(fieldName, defaultColumns = []) {
+    console.log(`\n--- PILIH KOLOM UNTUK ${fieldName.toUpperCase()} ---`);
+    console.log("Kolom yang tersedia:");
+    columnNames.forEach((colName, index) => {
+      const isDefault = defaultColumns.includes(colName);
+      console.log(`${index + 1}. ${colName}${isDefault ? " (default)" : ""}`);
+    });
+    console.log(`${columnNames.length + 1}. Skip/Kosongkan`);
+    
+    const choice = readlineSync.question(`Pilih kolom untuk ${fieldName} (1-${columnNames.length + 1}${defaultColumns.length > 0 ? ', default: kolom default yang tersedia' : ''}): `);
+    
+    if (choice && !isNaN(choice)) {
+      const choiceNum = parseInt(choice);
+      if (choiceNum >= 1 && choiceNum <= columnNames.length) {
+        return columnNames[choiceNum - 1];
+      } else if (choiceNum === columnNames.length + 1) {
+        return ""; // Skip
+      }
+    }
+    
+    // Default: cari kolom default yang tersedia
+    for (const defaultCol of defaultColumns) {
+      if (columnNames.includes(defaultCol)) {
+        return defaultCol;
+      }
+    }
+    
+    return ""; // Tidak ada default yang cocok
+  }
+
+  // Mapping kolom Excel dengan pemilihan berbasis nomor
+  console.log("\n=== MAPPING KOLOM EXCEL ===");
+  console.log("Silakan pilih kolom yang sesuai untuk setiap field yang dibutuhkan:");
   
   const columnMapping = {
-    date: readlineSync.question(`Nama kolom untuk TANGGAL (default: "DATE" atau "CUSTOMS CLEARANCE DATE"): `).trim() || "",
-    hsCode: readlineSync.question(`Nama kolom untuk HS CODE (default: "HS CODE"): `).trim() || "HS CODE",
-    itemDesc: readlineSync.question(`Nama kolom untuk DESKRIPSI ITEM (default: "ITEM DESC" atau "PRODUCT DESCRIPTION(EN)"): `).trim() || "",
-    gsm: readlineSync.question(`Nama kolom untuk GSM (default: "GSM"): `).trim() || "GSM",
-    item: readlineSync.question(`Nama kolom untuk ITEM (default: "ITEM"): `).trim() || "ITEM",
-    addOn: readlineSync.question(`Nama kolom untuk ADD ON (default: "ADD ON"): `).trim() || "ADD ON",
-    importer: readlineSync.question(`Nama kolom untuk IMPORTER (default: "IMPORTER" atau "PURCHASER"): `).trim() || "",
-    supplier: readlineSync.question(`Nama kolom untuk SUPPLIER (default: "SUPPLIER"): `).trim() || "SUPPLIER",
-    originCountry: readlineSync.question(`Nama kolom untuk ORIGIN COUNTRY (default: "ORIGIN COUNTRY"): `).trim() || "ORIGIN COUNTRY",
-    unitPrice: readlineSync.question(`Nama kolom untuk UNIT PRICE USD (default: "CIF KG Unit In USD", "USD Qty Unit", atau "UNIT PRICE(USD)"): `).trim() || "",
-    quantity: readlineSync.question(`Nama kolom untuk QUANTITY KG (default: "Net KG Wt", "qty", atau "BUSINESS QUANTITY (KG)"): `).trim() || ""
+    date: selectColumn("TANGGAL", ["DATE", "CUSTOMS CLEARANCE DATE"]),
+    hsCode: selectColumn("HS CODE", ["HS CODE"]),
+    itemDesc: selectColumn("DESKRIPSI ITEM", ["ITEM DESC", "PRODUCT DESCRIPTION(EN)"]),
+    gsm: selectColumn("GSM", ["GSM"]),
+    item: selectColumn("ITEM", ["ITEM"]),
+    addOn: selectColumn("ADD ON", ["ADD ON"]),
+    importer: selectColumn("IMPORTER", ["IMPORTER", "PURCHASER"]),
+    supplier: selectColumn("SUPPLIER", ["SUPPLIER"]),
+    originCountry: selectColumn("ORIGIN COUNTRY", ["ORIGIN COUNTRY"]),
+    unitPrice: selectColumn("UNIT PRICE USD", ["CIF KG Unit In USD", "USD Qty Unit", "UNIT PRICE(USD)"]),
+    quantity: selectColumn("QUANTITY KG", ["Net KG Wt", "qty", "BUSINESS QUANTITY (KG)"])
   };
   
-  console.log("\n=== MAPPING SELESAI ===\n");
+  console.log("\n=== MAPPING SELESAI ===");
+  console.log("Mapping kolom yang dipilih:");
+  Object.entries(columnMapping).forEach(([key, value]) => {
+    console.log(`  ${key}: ${value || "(tidak dipilih/skip)"}`);
+  });
+  console.log();
   
   const periodYear = readlineSync.question(`Masukkan tahun periode (misal, 2024): `) || new Date().getFullYear();
   // --- TAMBAHAN: Input INCOTERM dari pengguna ---
@@ -58,7 +139,7 @@ async function main() {
   const globalIncoterm = incotermUserInput || "N/A"; // Jika kosong, default ke N/A
   // --- AKHIR TAMBAHAN ---
 
-  let allRawData = readAndPreprocessData(inputFile, sheetName, dateFormat, numberFormat, columnMapping);
+  let allRawData = readAndPreprocessData(inputFile, selectedSheet, dateFormat, numberFormat, columnMapping);
 
   if (!allRawData || allRawData.length === 0) {
     console.log("Tidak ada data untuk diproses atau terjadi error saat membaca file.");
