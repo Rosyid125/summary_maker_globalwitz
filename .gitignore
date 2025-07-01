@@ -1,4 +1,4 @@
-node_modules
-package-lock.json
-original_excel
-processed_excel
+src/
+original_excel/
+processed_excel/
+logs/
