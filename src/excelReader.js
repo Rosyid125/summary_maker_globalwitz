@@ -165,8 +165,16 @@ function parseDate(dateString, dateFormat = 'DD/MM/YYYY') {
   }
 }
 
-function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess = DEFAULT_SHEET_NAME, dateFormat = 'DD/MM/YYYY', numberFormat = 'EUROPEAN', columnMapping = {}) {
-  const inputFile = path.join(DEFAULT_INPUT_FOLDER, inputFileName);
+function readAndPreprocessData(inputFileNameOrPath = "input.xlsx", sheetNameToProcess = DEFAULT_SHEET_NAME, dateFormat = 'DD/MM/YYYY', numberFormat = 'EUROPEAN', columnMapping = {}) {
+  let inputFile;
+  
+  // Check if it's already a full path or just a filename
+  if (path.isAbsolute(inputFileNameOrPath) || inputFileNameOrPath.includes(path.sep)) {
+    inputFile = inputFileNameOrPath;
+  } else {
+    inputFile = path.join(DEFAULT_INPUT_FOLDER, inputFileNameOrPath);
+  }
+  
   if (!fs.existsSync(inputFile)) {
     console.error(`Error: File input "${inputFile}" tidak ditemukan.`);
     return null;
@@ -260,8 +268,16 @@ function readAndPreprocessData(inputFileName = "input.xlsx", sheetNameToProcess 
 }
 
 // Helper functions untuk membaca informasi struktur Excel
-function getExcelInfo(inputFileName = "input.xlsx") {
-  const inputFile = path.join(DEFAULT_INPUT_FOLDER, inputFileName);
+function getExcelInfo(inputFileNameOrPath = "input.xlsx") {
+  let inputFile;
+  
+  // Check if it's already a full path or just a filename
+  if (path.isAbsolute(inputFileNameOrPath) || inputFileNameOrPath.includes(path.sep)) {
+    inputFile = inputFileNameOrPath;
+  } else {
+    inputFile = path.join(DEFAULT_INPUT_FOLDER, inputFileNameOrPath);
+  }
+  
   if (!fs.existsSync(inputFile)) {
     console.error(`Error: File input "${inputFile}" tidak ditemukan.`);
     return null;
@@ -291,8 +307,16 @@ function getExcelInfo(inputFileName = "input.xlsx") {
   }
 }
 
-function getSheetColumnNames(inputFileName, sheetName) {
-  const inputFile = path.join(DEFAULT_INPUT_FOLDER, inputFileName);
+function getSheetColumnNames(inputFileNameOrPath, sheetName) {
+  let inputFile;
+  
+  // Check if it's already a full path or just a filename
+  if (path.isAbsolute(inputFileNameOrPath) || inputFileNameOrPath.includes(path.sep)) {
+    inputFile = inputFileNameOrPath;
+  } else {
+    inputFile = path.join(DEFAULT_INPUT_FOLDER, inputFileNameOrPath);
+  }
+  
   if (!fs.existsSync(inputFile)) {
     return [];
   }
@@ -315,4 +339,41 @@ function getSheetColumnNames(inputFileName, sheetName) {
   }
 }
 
-module.exports = { readAndPreprocessData, getExcelInfo, getSheetColumnNames };
+/**
+ * Scan dan daftar semua file Excel di folder input
+ * @param {string} inputFolder - Folder tempat file input berada
+ * @returns {Array} Array berisi informasi file Excel yang ditemukan
+ */
+function scanExcelFiles(inputFolder = DEFAULT_INPUT_FOLDER) {
+  try {
+    const folderPath = path.resolve(inputFolder);
+    
+    if (!fs.existsSync(folderPath)) {
+      console.log(`Folder ${inputFolder} tidak ditemukan.`);
+      return [];
+    }
+
+    const files = fs.readdirSync(folderPath);
+    const excelFiles = files.filter(file => {
+      const ext = path.extname(file).toLowerCase();
+      return ext === '.xlsx' || ext === '.xls';
+    });
+
+    return excelFiles.map(file => {
+      const filePath = path.join(folderPath, file);
+      const stats = fs.statSync(filePath);
+      
+      return {
+        name: file,
+        path: filePath,
+        size: (stats.size / 1024 / 1024).toFixed(2) + ' MB',
+        modified: stats.mtime.toLocaleDateString('id-ID')
+      };
+    });
+  } catch (error) {
+    console.error(`Error scanning folder ${inputFolder}:`, error.message);
+    return [];
+  }
+}
+
+module.exports = { readAndPreprocessData, getExcelInfo, getSheetColumnNames, scanExcelFiles };

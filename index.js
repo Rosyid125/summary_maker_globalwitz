@@ -2,7 +2,7 @@
 const readlineSync = require("readline-sync");
 const path = require("path");
 const { MONTH_ORDER } = require("./src/utils"); // Pastikan utils.js ada jika dibutuhkan
-const { readAndPreprocessData, getExcelInfo, getSheetColumnNames } = require("./src/excelReader");
+const { readAndPreprocessData, getExcelInfo, getSheetColumnNames, scanExcelFiles } = require("./src/excelReader");
 const { performAggregation } = require("./src/aggregator");
 const { prepareGroupBlock, writeOutputToFile } = require("./src/outputFormatter");
 
@@ -14,7 +14,35 @@ const DEFAULT_SHEET_NAME = "DATA OLAH";
 async function main() {
   console.log("Memulai proses pembuatan summary Excel...");
 
-  const inputFile = readlineSync.question(`Masukkan nama file Excel input (default: ${DEFAULT_INPUT_FILENAME}): `) || DEFAULT_INPUT_FILENAME;
+  // Scan files di folder input
+  console.log("\n=== MEMINDAI FILE EXCEL ===");
+  const availableFiles = scanExcelFiles(DEFAULT_INPUT_FOLDER);
+  
+  if (availableFiles.length === 0) {
+    console.log(`Tidak ada file Excel (.xlsx/.xls) yang ditemukan di folder "${DEFAULT_INPUT_FOLDER}".`);
+    console.log("Silakan letakkan file Excel di folder tersebut dan coba lagi.");
+    return;
+  }
+
+  // Tampilkan daftar file yang tersedia
+  console.log("File Excel yang tersedia:");
+  availableFiles.forEach((file, index) => {
+    console.log(`${index + 1}. ${file.name} (${file.size}, dimodifikasi: ${file.modified})`);
+  });
+
+  // Biarkan user memilih file
+  const fileChoice = readlineSync.question(`\nPilih file Excel (1-${availableFiles.length}): `);
+  
+  if (!fileChoice || isNaN(fileChoice) || fileChoice < 1 || fileChoice > availableFiles.length) {
+    console.log("Pilihan tidak valid. Proses dihentikan.");
+    return;
+  }
+
+  const selectedFile = availableFiles[fileChoice - 1];
+  console.log(`File yang dipilih: ${selectedFile.name}\n`);
+
+  // Menggunakan path lengkap untuk file yang dipilih
+  const inputFile = selectedFile.path;
   
   // Membaca informasi struktur Excel
   console.log("\nMembaca struktur file Excel...");
