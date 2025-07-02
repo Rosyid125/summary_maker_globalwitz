@@ -320,6 +320,7 @@ class JSStyleExcelReader:
                 supplier = get_column_value(row, 'supplier', ["Shipper Name", "SUPPLIER"]) or "-"
                 origin_country = (get_column_value(row, 'origin_country', ["Country of Origin", "ORIGIN COUNTRY"]) or
                                  get_column_value(row, 'originCountry', ["Country of Origin", "ORIGIN COUNTRY"])) or "-"
+                incoterms = get_column_value(row, 'incoterms', ["INCOTERMS", "Incoterms", "INCOTERM", "Incoterm"]) or "-"
                 
                 # Process numeric fields - improved price column detection
                 # Support both GUI mapping keys (unit_price/quantity) and original keys (unitPrice/quantity)
@@ -345,6 +346,7 @@ class JSStyleExcelReader:
                     'importer': importer,
                     'supplier': supplier,
                     'originCountry': origin_country,
+                    'incoterms': incoterms,
                     'usdQtyUnit': usd_qty_unit,
                     'qty': qty
                 }

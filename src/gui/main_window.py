@@ -39,6 +39,7 @@ class MainWindow:
         self.number_format = tk.StringVar(value="auto")
         self.target_year = tk.StringVar(value=str(datetime.now().year))
         self.incoterm = tk.StringVar(value="-")
+        self.incoterm_mode = tk.StringVar(value="manual")  # "manual" or "from_column"
         self.output_filename = tk.StringVar()
         
         # Column mapping variables
@@ -53,13 +54,24 @@ class MainWindow:
             'supplier': tk.StringVar(),
             'origin_country': tk.StringVar(),
             'unit_price': tk.StringVar(),
-            'quantity': tk.StringVar()
+            'quantity': tk.StringVar(),
+            'incoterms': tk.StringVar()
         }
         
         self.available_columns = []
         self.processing = False
         
         self.setup_ui()
+    
+    def on_incoterm_mode_change(self, event=None):
+        """Handle incoterm mode change to update UI visibility"""
+        mode = self.incoterm_mode.get()
+        if mode == "manual":
+            self.incoterm_combo.config(state="normal")
+            self.incoterm_info_label.config(text="(Manual entry - applied to all rows)")
+        else:  # from_column
+            self.incoterm_combo.config(state="disabled")
+            self.incoterm_info_label.config(text="(Read from incoterms column - first 3 chars)")
     
     def setup_ui(self):
         """Setup the user interface"""
@@ -179,21 +191,36 @@ class MainWindow:
         year_entry.grid(row=0, column=1, sticky='w', padx=(10, 0), pady=2)
         
         # INCOTERM setting
-        ttk.Label(other_section, text="INCOTERM:").grid(row=1, column=0, sticky='w', pady=2)
-        incoterm_combo = ttk.Combobox(other_section, textvariable=self.incoterm, 
+        ttk.Label(other_section, text="INCOTERM Mode:").grid(row=1, column=0, sticky='w', pady=2)
+        self.incoterm_mode_combo = ttk.Combobox(other_section, textvariable=self.incoterm_mode, 
+                                                values=["manual", "from_column"], 
+                                                state="readonly", width=15)
+        self.incoterm_mode_combo.grid(row=1, column=1, sticky='w', padx=(10, 0), pady=2)
+        self.incoterm_mode_combo.bind('<<ComboboxSelected>>', self.on_incoterm_mode_change)
+        
+        ttk.Label(other_section, text="INCOTERM:").grid(row=2, column=0, sticky='w', pady=2)
+        self.incoterm_combo = ttk.Combobox(other_section, textvariable=self.incoterm, 
                                      values=["FOB", "CIF", "CFR", "EXW", "FCA"], width=10)
-        incoterm_combo.grid(row=1, column=1, sticky='w', padx=(10, 0), pady=2)
+        self.incoterm_combo.grid(row=2, column=1, sticky='w', padx=(10, 0), pady=2)
+        
+        # Info label for from_column mode
+        self.incoterm_info_label = ttk.Label(other_section, text="(Manual entry - applied to all rows)", 
+                                            font=('TkDefaultFont', 8), foreground='gray')
+        self.incoterm_info_label.grid(row=2, column=2, sticky='w', padx=(10, 0), pady=2)
         
         # Output filename
-        ttk.Label(other_section, text="Output Filename:").grid(row=2, column=0, sticky='w', pady=2)
+        ttk.Label(other_section, text="Output Filename:").grid(row=3, column=0, sticky='w', pady=2)
         output_entry = ttk.Entry(other_section, textvariable=self.output_filename, width=50)
-        output_entry.grid(row=2, column=1, columnspan=2, sticky='ew', padx=(10, 0), pady=2)
+        output_entry.grid(row=3, column=1, columnspan=2, sticky='ew', padx=(10, 0), pady=2)
         
         # Auto-generate filename button
         auto_btn = ttk.Button(other_section, text="Auto Generate", command=self.auto_generate_filename)
-        auto_btn.grid(row=2, column=3, padx=(10, 0), pady=2)
+        auto_btn.grid(row=3, column=3, padx=(10, 0), pady=2)
         
         other_section.columnconfigure(1, weight=1)
+        
+        # Initialize incoterm mode UI state
+        self.on_incoterm_mode_change()
     
     def setup_mapping_tab(self):
         """Setup column mapping tab"""
@@ -235,7 +262,8 @@ class MainWindow:
             'supplier': 'Supplier Name',
             'origin_country': 'Origin Country',
             'unit_price': 'Unit Price',
-            'quantity': 'Quantity'
+            'quantity': 'Quantity',
+            'incoterms': 'Incoterms (for auto-read mode)'
         }
         
         for i, (field_key, description) in enumerate(field_descriptions.items()):
@@ -624,9 +652,10 @@ class MainWindow:
             
             period_year = self.target_year.get() or str(datetime.now().year)
             global_incoterm = self.incoterm.get() or "FOB"
+            incoterm_mode = self.incoterm_mode.get()
             output_filename = self.output_filename.get() or "summary_output.xlsx"
             
-            self.logger.info(f"Processing with period_year='{period_year}', global_incoterm='{global_incoterm}', output_filename='{output_filename}'")
+            self.logger.info(f"Processing with period_year='{period_year}', global_incoterm='{global_incoterm}', incoterm_mode='{incoterm_mode}', output_filename='{output_filename}'")
             
             self.root.after(0, lambda: self.progress_var.set(60))
             
@@ -637,6 +666,7 @@ class MainWindow:
                 all_raw_data,
                 period_year,
                 global_incoterm,
+                incoterm_mode,
                 output_filename
             )
             

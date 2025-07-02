@@ -20,19 +20,21 @@ class JSStyleProcessor:
         self.aggregator = DataAggregator(logger)
         self.formatter = OutputFormatter(logger)
     
-    def process_sheet_data(self, data_to_process: List[Dict], sheet_base_name: str, incoterm_value: str) -> Optional[Dict[str, Any]]:
+    def process_sheet_data(self, data_to_process: List[Dict], sheet_base_name: str, 
+                          incoterm_value: str, incoterm_mode: str = "manual") -> Optional[Dict[str, Any]]:
         """
         Process sheet data exactly like JavaScript processSheetData function
         
         Args:
             data_to_process: List of data dictionaries
             sheet_base_name: Base name for the sheet
-            incoterm_value: INCOTERM value to use
+            incoterm_value: INCOTERM value to use (for manual mode)
+            incoterm_mode: Mode for incoterm handling ("manual" or "from_column")
             
         Returns:
             Dict with sheet data or None if no data
         """
-        self.logger.info(f"Processing data for sheet based on '{sheet_base_name}' with INCOTERM: {incoterm_value}...")
+        self.logger.info(f"Processing data for sheet based on '{sheet_base_name}' with INCOTERM: {incoterm_value}, mode: {incoterm_mode}...")
         
         # Group by supplier or origin
         grouped_by_supplier_or_origin = {}
@@ -65,7 +67,8 @@ class JSStyleProcessor:
             
             if summary_lvl2:
                 # Prepare group block
-                group_block = self.formatter.prepare_group_block(group_name, summary_lvl1, summary_lvl2, incoterm_value)
+                group_block = self.formatter.prepare_group_block(group_name, summary_lvl1, summary_lvl2, 
+                                                               incoterm_value, incoterm_mode, group_data)
                 all_rows_for_sheet_content.extend(group_block['groupBlockRows'])
                 
                 supplier_groups_meta.append({
@@ -175,14 +178,16 @@ class JSStyleProcessor:
         return None
     
     def process_data_like_javascript(self, all_raw_data: List[Dict], period_year: str, 
-                                   global_incoterm: str, output_filename: str = "summary_output.xlsx") -> str:
+                                   global_incoterm: str, incoterm_mode: str = "manual",
+                                   output_filename: str = "summary_output.xlsx") -> str:
         """
         Process all data like the JavaScript main function
         
         Args:
             all_raw_data: All raw data
             period_year: Year for the period
-            global_incoterm: Global INCOTERM value
+            global_incoterm: Global INCOTERM value (for manual mode)
+            incoterm_mode: Mode for incoterm handling ("manual" or "from_column")
             output_filename: Output filename
             
         Returns:
@@ -204,7 +209,8 @@ class JSStyleProcessor:
         # Process data without importer
         if data_with_blank_or_na_importer:
             sheet_name_for_blank = "Data_Tanpa_Importer"
-            sheet_result = self.process_sheet_data(data_with_blank_or_na_importer, sheet_name_for_blank, global_incoterm)
+            sheet_result = self.process_sheet_data(data_with_blank_or_na_importer, sheet_name_for_blank, 
+                                                 global_incoterm, incoterm_mode)
             if sheet_result:
                 workbook_data_for_excel_js.append(sheet_result)
         
@@ -221,7 +227,8 @@ class JSStyleProcessor:
                     base_sheet_name = importer.replace('*', '_').replace('?', '_').replace(':', '_').replace('\\', '_').replace('/', '_').replace('[', '_').replace(']', '_')
                     base_sheet_name = base_sheet_name[:30]  # Limit to 30 characters
                     
-                    sheet_result = self.process_sheet_data(importer_data, base_sheet_name, global_incoterm)
+                    sheet_result = self.process_sheet_data(importer_data, base_sheet_name, 
+                                                          global_incoterm, incoterm_mode)
                     if sheet_result:
                         workbook_data_for_excel_js.append(sheet_result)
         

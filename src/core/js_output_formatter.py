@@ -17,8 +17,38 @@ class OutputFormatter:
     def __init__(self, logger):
         self.logger = logger
     
+    def extract_incoterm_from_value(self, incoterm_value: str) -> str:
+        """Extract first 3 uppercase characters from incoterm value"""
+        if not incoterm_value or not isinstance(incoterm_value, str):
+            return "-"
+        
+        incoterm_clean = incoterm_value.strip().upper()
+        if len(incoterm_clean) >= 3:
+            return incoterm_clean[:3]
+        else:
+            return "-"
+    
+    def get_incoterm_for_combination(self, combo: Dict, raw_data: List[Dict], 
+                                   incoterm_mode: str, default_incoterm: str) -> str:
+        """Get incoterm value for a specific combination based on mode"""
+        if incoterm_mode == "manual":
+            return default_incoterm
+        
+        # For from_column mode, find the first matching row and extract incoterm
+        for row in raw_data:
+            if (row.get('hsCode') == combo['hsCode'] and 
+                row.get('item') == combo['item'] and 
+                row.get('gsm') == combo['gsm'] and 
+                row.get('addOn') == combo['addOn']):
+                
+                incoterm_raw = row.get('incoterms', '')
+                return self.extract_incoterm_from_value(incoterm_raw)
+        
+        return "-"
+    
     def prepare_group_block(self, group_name: str, summary_lvl1_data: List[Dict], 
-                          summary_lvl2_data: List[Dict], incoterm_value: str) -> Dict[str, Any]:
+                          summary_lvl2_data: List[Dict], incoterm_value: str, 
+                          incoterm_mode: str = "manual", raw_data: List[Dict] = None) -> Dict[str, Any]:
         """
         Prepare group block exactly like JavaScript prepareGroupBlock function
         
@@ -26,7 +56,9 @@ class OutputFormatter:
             group_name: Name of the supplier/group
             summary_lvl1_data: Monthly summary data
             summary_lvl2_data: Overall summary data
-            incoterm_value: INCOTERM value to use
+            incoterm_value: INCOTERM value to use (for manual mode)
+            incoterm_mode: Mode for incoterm handling ("manual" or "from_column")
+            raw_data: Raw data for extracting incoterms per row (for from_column mode)
             
         Returns:
             Dict with group block data
@@ -106,7 +138,9 @@ class OutputFormatter:
             
             if recap_data:
                 avg_price = round(recap_data['avgOfSummaryPrice'], 2) if recap_data['avgOfSummaryPrice'] else 0
-                data_row.extend([avg_price, incoterm_value, recap_data['totalOfSummaryQty']])
+                # Get incoterm based on mode
+                combo_incoterm = self.get_incoterm_for_combination(combo, raw_data or [], incoterm_mode, incoterm_value)
+                data_row.extend([avg_price, combo_incoterm, recap_data['totalOfSummaryQty']])
             else:
                 data_row.extend(["-", "-", "-"])
             
@@ -623,3 +657,52 @@ class OutputFormatter:
                                 formats['data_cell'])
             
             current_item_row += 1
+    
+    def extract_incoterm_from_value(self, incoterm_value: str) -> str:
+        """
+        Extract first 3 uppercase characters from incoterm value
+        
+        Args:
+            incoterm_value: Raw incoterm value from data
+            
+        Returns:
+            str: First 3 uppercase characters or "-" if invalid
+        """
+        if not incoterm_value or not isinstance(incoterm_value, str):
+            return "-"
+        
+        # Extract first 3 characters and convert to uppercase
+        incoterm_clean = incoterm_value.strip().upper()
+        if len(incoterm_clean) >= 3:
+            return incoterm_clean[:3]
+        else:
+            return "-"
+    
+    def get_incoterm_for_combination(self, combo: Dict, raw_data: List[Dict], 
+                                   incoterm_mode: str, default_incoterm: str) -> str:
+        """
+        Get incoterm value for a specific combination based on mode
+        
+        Args:
+            combo: Combination dict with hsCode, item, gsm, addOn
+            raw_data: Raw data to search for incoterm
+            incoterm_mode: "manual" or "from_column"
+            default_incoterm: Default incoterm for manual mode
+            
+        Returns:
+            str: Incoterm value to use
+        """
+        if incoterm_mode == "manual":
+            return default_incoterm
+        
+        # For from_column mode, find the first matching row and extract incoterm
+        for row in raw_data:
+            if (row.get('hsCode') == combo['hsCode'] and 
+                row.get('item') == combo['item'] and 
+                row.get('gsm') == combo['gsm'] and 
+                row.get('addOn') == combo['addOn']):
+                
+                incoterm_raw = row.get('incoterms', '')
+                return self.extract_incoterm_from_value(incoterm_raw)
+        
+        return "-"
