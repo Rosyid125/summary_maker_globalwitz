@@ -1,4 +1,7 @@
-src/
+src/__pycache__
+src/core/__pycache__
+src/gui/__pycache__
+src/utils/__pycache__
 original_excel/
 processed_excel/
 logs/
