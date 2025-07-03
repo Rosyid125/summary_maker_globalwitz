@@ -76,3 +76,6 @@ package-lock.json
 output/
 temp/
 tmp/
+
+# Spec files
+*.spec
