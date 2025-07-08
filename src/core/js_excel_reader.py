@@ -286,6 +286,19 @@ class JSStyleExcelReader:
                         return row[actual_col]
                 return None
             
+            def safe_string_value(value):
+                """Convert value to string safely, handling NaN and None"""
+                import pandas as pd
+                import numpy as np
+                
+                if value is None:
+                    return "-"
+                if pd.isna(value) or (isinstance(value, float) and np.isnan(value)):
+                    return "-"
+                if str(value).strip() == "":
+                    return "-"
+                return str(value).strip()
+            
             # Process each row
             processed_data = []
             for index, row in df.iterrows():
@@ -308,19 +321,19 @@ class JSStyleExcelReader:
                         month = self.get_month_name(parsed_date)
                 
                 # Process other fields - support both GUI mapping keys and original keys
-                hs_code = (get_column_value(row, 'hs_code', ["HS Code", "HS CODE"]) or
-                          get_column_value(row, 'hsCode', ["HS Code", "HS CODE"])) or "-"
-                item_desc = (get_column_value(row, 'item_description', ["Product Description", "ITEM DESC", "PRODUCT DESCRIPTION(EN)"]) or
-                            get_column_value(row, 'itemDesc', ["Product Description", "ITEM DESC", "PRODUCT DESCRIPTION(EN)"])) or "-"
-                gsm = get_column_value(row, 'gsm', ["GSM"]) or "-"
-                item = get_column_value(row, 'item', ["ITEM"]) or "-"
-                add_on = (get_column_value(row, 'add_on', ["ADD ON"]) or
-                         get_column_value(row, 'addOn', ["ADD ON"])) or "-"
-                importer = get_column_value(row, 'importer', ["Consignee Name", "IMPORTER", "PURCHASER"]) or "-"
-                supplier = get_column_value(row, 'supplier', ["Shipper Name", "SUPPLIER"]) or "-"
-                origin_country = (get_column_value(row, 'origin_country', ["Country of Origin", "ORIGIN COUNTRY"]) or
-                                 get_column_value(row, 'originCountry', ["Country of Origin", "ORIGIN COUNTRY"])) or "-"
-                incoterms = get_column_value(row, 'incoterms', ["INCOTERMS", "Incoterms", "INCOTERM", "Incoterm"]) or "-"
+                hs_code = safe_string_value(get_column_value(row, 'hs_code', ["HS Code", "HS CODE"]) or
+                          get_column_value(row, 'hsCode', ["HS Code", "HS CODE"]))
+                item_desc = safe_string_value(get_column_value(row, 'item_description', ["Product Description", "ITEM DESC", "PRODUCT DESCRIPTION(EN)"]) or
+                            get_column_value(row, 'itemDesc', ["Product Description", "ITEM DESC", "PRODUCT DESCRIPTION(EN)"]))
+                gsm = safe_string_value(get_column_value(row, 'gsm', ["GSM"]))
+                item = safe_string_value(get_column_value(row, 'item', ["ITEM"]))
+                add_on = safe_string_value(get_column_value(row, 'add_on', ["ADD ON"]) or
+                         get_column_value(row, 'addOn', ["ADD ON"]))
+                importer = safe_string_value(get_column_value(row, 'importer', ["Consignee Name", "IMPORTER", "PURCHASER"]))
+                supplier = safe_string_value(get_column_value(row, 'supplier', ["Shipper Name", "SUPPLIER"]))
+                origin_country = safe_string_value(get_column_value(row, 'origin_country', ["Country of Origin", "ORIGIN COUNTRY"]) or
+                                 get_column_value(row, 'originCountry', ["Country of Origin", "ORIGIN COUNTRY"]))
+                incoterms = safe_string_value(get_column_value(row, 'incoterms', ["INCOTERMS", "Incoterms", "INCOTERM", "Incoterm"]))
                 
                 # Process numeric fields - improved price column detection
                 # Support both GUI mapping keys (unit_price/quantity) and original keys (unitPrice/quantity)

@@ -94,8 +94,16 @@ class OutputFormatter:
             if combo not in distinct_combinations:
                 distinct_combinations.append(combo)
         
-        # Sort distinct combinations
-        distinct_combinations.sort(key=lambda x: (x['hsCode'], x['item'], x['gsm'], x['addOn']))
+        # Sort distinct combinations - ensure all values are strings to avoid comparison errors
+        def safe_sort_key(x):
+            return (
+                str(x['hsCode']) if x['hsCode'] is not None else "",
+                str(x['item']) if x['item'] is not None else "",
+                str(x['gsm']) if x['gsm'] is not None else "",
+                str(x['addOn']) if x['addOn'] is not None else ""
+            )
+        
+        distinct_combinations.sort(key=safe_sort_key)
         
         # Create data rows
         for index, combo in enumerate(distinct_combinations):

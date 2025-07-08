@@ -15,6 +15,16 @@ class DataAggregator:
     
     def __init__(self, logger):
         self.logger = logger
+    
+    def _safe_string_value(self, value):
+        """Convert value to string safely, handling NaN and None"""
+        if value is None:
+            return ""
+        if pd.isna(value) or (isinstance(value, float) and pd.isna(value)):
+            return ""
+        if str(value).strip() == "":
+            return ""
+        return str(value).strip()
     def perform_aggregation(self, data: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Perform aggregation exactly like the JavaScript version
@@ -42,16 +52,16 @@ class DataAggregator:
             
             # If GSM, ITEM, or ADD ON don't exist (None/undefined), treat as empty string for grouping
             # If value is string "-", it will be treated as unique "-" value
-            gsm_value = row.get('gsm') or ""
-            item_value = row.get('item') or ""
-            add_on_value = row.get('addOn') or ""
+            gsm_value = self._safe_string_value(row.get('gsm'))
+            item_value = self._safe_string_value(row.get('item'))
+            add_on_value = self._safe_string_value(row.get('addOn'))
             
             key = f"{row['month']}-{row['hsCode']}-{item_value}-{gsm_value}-{add_on_value}"
             
             if key not in monthly_summary:
                 monthly_summary[key] = {
                     'month': row['month'],
-                    'hsCode': row['hsCode'],
+                    'hsCode': self._safe_string_value(row['hsCode']),
                     'item': item_value,
                     'gsm': gsm_value,
                     'addOn': add_on_value,
@@ -76,10 +86,10 @@ class DataAggregator:
         for group in monthly_summary.values():
             summary_lvl1_data.append({
                 'month': group['month'],
-                'hsCode': group['hsCode'],
-                'item': group['item'],
-                'gsm': group['gsm'],
-                'addOn': group['addOn'],
+                'hsCode': self._safe_string_value(group['hsCode']),
+                'item': self._safe_string_value(group['item']),
+                'gsm': self._safe_string_value(group['gsm']),
+                'addOn': self._safe_string_value(group['addOn']),
                 'avgPrice': average_greater_than_zero(group['usdQtyUnits']),
                 'totalQty': group['totalQty']
             })
@@ -90,10 +100,10 @@ class DataAggregator:
             key = f"{row['hsCode']}-{row['item']}-{row['gsm']}-{row['addOn']}"
             if key not in recap_summary:
                 recap_summary[key] = {
-                    'hsCode': row['hsCode'],
-                    'item': row['item'],
-                    'gsm': row['gsm'],
-                    'addOn': row['addOn'],
+                    'hsCode': self._safe_string_value(row['hsCode']),
+                    'item': self._safe_string_value(row['item']),
+                    'gsm': self._safe_string_value(row['gsm']),
+                    'addOn': self._safe_string_value(row['addOn']),
                     'avgPrices': [],
                     'totalQty': 0
                 }
@@ -104,10 +114,10 @@ class DataAggregator:
         summary_lvl2_data = []
         for group in recap_summary.values():
             summary_lvl2_data.append({
-                'hsCode': group['hsCode'],
-                'item': group['item'], 
-                'gsm': group['gsm'],
-                'addOn': group['addOn'],
+                'hsCode': self._safe_string_value(group['hsCode']),
+                'item': self._safe_string_value(group['item']), 
+                'gsm': self._safe_string_value(group['gsm']),
+                'addOn': self._safe_string_value(group['addOn']),
                 'avgOfSummaryPrice': average_greater_than_zero(group['avgPrices']),
                 'totalOfSummaryQty': group['totalQty']
             })
