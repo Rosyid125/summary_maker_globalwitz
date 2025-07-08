@@ -9,7 +9,7 @@ import os
 from typing import Dict, List, Any, Optional
 
 from ..utils.constants import MONTH_ORDER, DEFAULT_OUTPUT_FOLDER
-from ..utils.helpers import average_greater_than_zero
+from ..utils.helpers import average_greater_than_zero, format_american_number, format_price_with_precision
 
 class OutputFormatter:
     """Handles Excel output formatting with JavaScript-compatible logic"""
@@ -127,10 +127,10 @@ class OutputFormatter:
                         break
                 
                 if month_data:
-                    avg_price = round(month_data['avgPrice'], 2) if month_data['avgPrice'] else 0
-                    qty = month_data['totalQty']
+                    avg_price = format_price_with_precision(month_data['avgPrice']) if month_data['avgPrice'] else "0"
+                    qty = format_american_number(month_data['totalQty'], 0)
                     data_row.extend([avg_price, qty])
-                    monthly_totals[month_index] += qty
+                    monthly_totals[month_index] += month_data['totalQty'] if month_data['totalQty'] else 0
                 else:
                     data_row.extend(["-", "-"])
             
@@ -145,10 +145,10 @@ class OutputFormatter:
                     break
             
             if recap_data:
-                avg_price = round(recap_data['avgOfSummaryPrice'], 2) if recap_data['avgOfSummaryPrice'] else 0
+                avg_price = format_price_with_precision(recap_data['avgOfSummaryPrice']) if recap_data['avgOfSummaryPrice'] else "0"
                 # Get incoterm based on mode
                 combo_incoterm = self.get_incoterm_for_combination(combo, raw_data or [], incoterm_mode, incoterm_value)
-                data_row.extend([avg_price, combo_incoterm, recap_data['totalOfSummaryQty']])
+                data_row.extend([avg_price, combo_incoterm, format_american_number(recap_data['totalOfSummaryQty'], 0)])
             else:
                 data_row.extend(["-", "-", "-"])
             
@@ -162,9 +162,9 @@ class OutputFormatter:
             total_qty_per_mo_row = ["TOTAL QTY PER MO", "-", "-", "-", "-"]
             for total in monthly_totals:
                 # If total is 0 or None, show "-" instead of empty cell
-                display_total = total if (isinstance(total, (int, float)) and total > 0) else "-"
+                display_total = format_american_number(total, 0) if (isinstance(total, (int, float)) and total > 0) else "-"
                 total_qty_per_mo_row.extend([display_total, "-"])
-            total_qty_per_mo_row.extend([overall_total_qty, "-", "-"])
+            total_qty_per_mo_row.extend([format_american_number(overall_total_qty, 0), "-", "-"])
             group_block_rows.append(total_qty_per_mo_row)
             
             # Add quarterly totals
@@ -182,16 +182,16 @@ class OutputFormatter:
             
             total_qty_per_quartal_row = ["TOTAL QTY PER QUARTAL", "-", "-", "-", "-"]
             # Q1 (Jan-Mar)
-            q1_display = quarterly_totals[0] if quarterly_totals[0] > 0 else "-"
+            q1_display = format_american_number(quarterly_totals[0], 0) if quarterly_totals[0] > 0 else "-"
             total_qty_per_quartal_row.extend([q1_display, "-", "-", "-", "-", "-"])
             # Q2 (Apr-Jun)  
-            q2_display = quarterly_totals[1] if quarterly_totals[1] > 0 else "-"
+            q2_display = format_american_number(quarterly_totals[1], 0) if quarterly_totals[1] > 0 else "-"
             total_qty_per_quartal_row.extend([q2_display, "-", "-", "-", "-", "-"])
             # Q3 (Jul-Sep)
-            q3_display = quarterly_totals[2] if quarterly_totals[2] > 0 else "-"
+            q3_display = format_american_number(quarterly_totals[2], 0) if quarterly_totals[2] > 0 else "-"
             total_qty_per_quartal_row.extend([q3_display, "-", "-", "-", "-", "-"])
             # Q4 (Oct-Dec)
-            q4_display = quarterly_totals[3] if quarterly_totals[3] > 0 else "-"
+            q4_display = format_american_number(quarterly_totals[3], 0) if quarterly_totals[3] > 0 else "-"
             total_qty_per_quartal_row.extend([q4_display, "-", "-", "-", "-", "-"])
             total_qty_per_quartal_row.extend(["-", "-", "-"])
             group_block_rows.append(total_qty_per_quartal_row)
@@ -349,13 +349,31 @@ class OutputFormatter:
         formats['data_cell'] = workbook.add_format({
             'align': 'center',
             'valign': 'vcenter',
-            'border': 1
+            'border': 1,
+            'num_format': '#,##0.00'  # American number format
+        })
+        
+        # Price cell format with controlled precision (for price values)
+        formats['price_cell'] = workbook.add_format({
+            'align': 'center',
+            'valign': 'vcenter',
+            'border': 1,
+            'num_format': '#,##0.000'  # Up to 3 decimal places
         })
         
         # Data cell format without border (for separator rows)
         formats['no_border_cell'] = workbook.add_format({
             'align': 'center',
-            'valign': 'vcenter'
+            'valign': 'vcenter',
+            'num_format': '#,##0.00'  # American number format
+        })
+        
+        # Number format for quantities (no decimal places)
+        formats['qty_cell'] = workbook.add_format({
+            'align': 'center',
+            'valign': 'vcenter',
+            'border': 1,
+            'num_format': '#,##0'  # American number format, no decimals
         })
         
         # Bold data format
@@ -363,7 +381,17 @@ class OutputFormatter:
             'bold': True,
             'align': 'center',
             'valign': 'vcenter',
-            'border': 1
+            'border': 1,
+            'num_format': '#,##0.00'  # American number format
+        })
+        
+        # Bold price format with controlled precision
+        formats['bold_price'] = workbook.add_format({
+            'bold': True,
+            'align': 'center',
+            'valign': 'vcenter',
+            'border': 1,
+            'num_format': '#,##0.000'  # Up to 3 decimal places
         })
         
         # Total all supplier formats

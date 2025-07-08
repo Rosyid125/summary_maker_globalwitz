@@ -11,7 +11,7 @@ import os
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
-from ..utils.helpers import format_currency, get_month_name
+from ..utils.helpers import format_currency, get_month_name, format_american_number
 
 class OutputFormatter:
     """Handles Excel output generation with complex formatting"""
@@ -127,9 +127,9 @@ class OutputFormatter:
         # Summary data
         summary_items = [
             ("Total Records", summary.get('total_records', 0)),
-            ("Total Quantity", summary.get('total_quantity', 0)),
-            ("Average Unit Price", f"{incoterm} {summary.get('avg_unit_price', 0):.2f}" if summary.get('avg_unit_price') else "N/A"),
-            ("Total Value", f"{incoterm} {summary.get('total_value', 0):,.2f}"),
+            ("Total Quantity", format_american_number(summary.get('total_quantity', 0), 0)),
+            ("Average Unit Price", f"{incoterm} {format_american_number(summary.get('avg_unit_price', 0))}" if summary.get('avg_unit_price') else "N/A"),
+            ("Total Value", f"{incoterm} {format_american_number(summary.get('total_value', 0))}"),
             ("Unique Suppliers", summary.get('unique_suppliers', 0)),
             ("Unique Items", summary.get('unique_items', 0)),
             ("Unique HS Codes", summary.get('unique_hs_codes', 0))
@@ -177,9 +177,9 @@ class OutputFormatter:
                 row_data.get('item', ''),
                 row_data.get('gsm', ''),
                 row_data.get('add_on', ''),
-                row_data.get('total_quantity', 0),
-                f"{row_data.get('avg_unit_price', 0):.2f}" if row_data.get('avg_unit_price') else "N/A",
-                f"{row_data.get('total_value', 0):,.2f}",
+                format_american_number(row_data.get('total_quantity', 0), 0),
+                format_american_number(row_data.get('avg_unit_price', 0)) if row_data.get('avg_unit_price') else "N/A",
+                format_american_number(row_data.get('total_value', 0)),
                 row_data.get('record_count', 0)
             ]
             
@@ -224,9 +224,9 @@ class OutputFormatter:
         for row_data in supplier_data:
             values = [
                 row_data.get('supplier', ''),
-                row_data.get('total_quantity', 0),
-                f"{row_data.get('avg_unit_price', 0):.2f}" if row_data.get('avg_unit_price') else "N/A",
-                f"{row_data.get('total_value', 0):,.2f}",
+                format_american_number(row_data.get('total_quantity', 0), 0),
+                format_american_number(row_data.get('avg_unit_price', 0)) if row_data.get('avg_unit_price') else "N/A",
+                format_american_number(row_data.get('total_value', 0)),
                 row_data.get('record_count', 0),
                 row_data.get('unique_items', 0)
             ]
@@ -270,12 +270,12 @@ class OutputFormatter:
         for row_data in item_data:
             values = [
                 row_data.get('item', ''),
-                row_data.get('total_quantity', 0),
-                f"{row_data.get('avg_unit_price', 0):.2f}" if row_data.get('avg_unit_price') else "N/A",
-                f"{row_data.get('total_value', 0):,.2f}",
+                format_american_number(row_data.get('total_quantity', 0), 0),
+                format_american_number(row_data.get('avg_unit_price', 0)) if row_data.get('avg_unit_price') else "N/A",
+                format_american_number(row_data.get('total_value', 0)),
                 row_data.get('record_count', 0),
                 row_data.get('unique_suppliers', 0),
-                f"{row_data.get('avg_gsm', 0):.1f}" if row_data.get('avg_gsm') else "N/A"
+                format_american_number(row_data.get('avg_gsm', 0), 1) if row_data.get('avg_gsm') else "N/A"
             ]
             
             for col, value in enumerate(values, 1):
@@ -332,8 +332,8 @@ class OutputFormatter:
                 values = [
                     importer_name,
                     overall.get('total_records', 0),
-                    overall.get('total_quantity', 0),
-                    f"{overall.get('total_value', 0):,.2f}",
+                    format_american_number(overall.get('total_quantity', 0), 0),
+                    format_american_number(overall.get('total_value', 0)),
                     overall.get('unique_suppliers', 0),
                     overall.get('unique_items', 0)
                 ]
@@ -357,8 +357,8 @@ class OutputFormatter:
             total_values = [
                 "TOTAL",
                 total_records,
-                total_quantity,
-                f"{total_value:,.2f}",
+                format_american_number(total_quantity, 0),
+                format_american_number(total_value),
                 "",  # Can't sum unique suppliers across importers
                 ""   # Can't sum unique items across importers
             ]
