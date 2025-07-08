@@ -12,6 +12,7 @@ A Python application with Tkinter GUI for processing Excel import/export data an
 - **Multi-level Data Aggregation**: Creates monthly summaries and overall statistics
 - **Professional Excel Output**: Generates formatted Excel reports with color-coded quarters
 - **Comprehensive Logging**: Detailed logging for troubleshooting and audit trails
+- **Smart Data Refresh**: Automatically clears cached data when switching between different Excel files (Fixed v1.1)
 
 ## Requirements
 

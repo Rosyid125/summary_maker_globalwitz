@@ -294,7 +294,11 @@ class MainWindow:
         
         # Clear mappings button
         clear_map_btn = ttk.Button(button_frame, text="Clear All", command=self.clear_column_mappings)
-        clear_map_btn.pack(side='left')
+        clear_map_btn.pack(side='left', padx=(0, 10))
+        
+        # Refresh all data button  
+        refresh_all_btn = ttk.Button(button_frame, text="Refresh All Data", command=self.refresh_all_data)
+        refresh_all_btn.pack(side='left')
         auto_map_btn.pack(pady=10)
     
     def setup_processing_tab(self):
@@ -412,10 +416,54 @@ class MainWindow:
             listbox.selection_set(0)  # Select first item
             listbox.focus()
     
+    def clear_previous_file_data(self):
+        """Clear all cached data from previous file to ensure fresh start"""
+        try:
+            # Clear current file info
+            if hasattr(self, 'current_excel_info'):
+                delattr(self, 'current_excel_info')
+            
+            # Clear sheet selection
+            self.selected_sheet.set("")
+            
+            # Clear available columns
+            self.available_columns = []
+            
+            # Clear all column mappings
+            for var in self.column_mappings.values():
+                var.set("")
+            
+            # Update combobox values to be empty
+            if hasattr(self, 'mapping_widgets'):
+                for widget in self.mapping_widgets.values():
+                    widget['values'] = [""]
+            
+            # Clear sheet combo
+            if hasattr(self, 'sheet_combo'):
+                self.sheet_combo['values'] = []
+            
+            # Clear info displays
+            if hasattr(self, 'info_text'):
+                self.info_text.delete(1.0, tk.END)
+            
+            if hasattr(self, 'sheet_info_text'):
+                self.sheet_info_text.delete(1.0, tk.END)
+            
+            # Clear output filename to force regeneration
+            self.output_filename.set("")
+            
+            self.log_message("Cleared previous file data - ready for new file")
+            
+        except Exception as e:
+            self.logger.error(f"Error clearing previous file data: {str(e)}")
+
     def load_file(self, file_path):
         """Load Excel file using JavaScript-style reader"""
         try:
             self.log_message(f"Loading file: {file_path}")
+            
+            # Clear all cached data from previous file
+            self.clear_previous_file_data()
             
             # Get Excel info using JavaScript-style reader
             excel_info = self.js_excel_reader.get_excel_info(file_path)
@@ -425,6 +473,7 @@ class MainWindow:
                 self.current_excel_info = excel_info
                 self.refresh_sheets()
                 self.show_file_info()
+                self.auto_generate_filename()  # Auto-generate new filename
                 self.log_message("File loaded successfully")
             else:
                 messagebox.showerror("Error", "Failed to load Excel file!")
@@ -441,11 +490,15 @@ class MainWindow:
             
             if sheets:
                 self.selected_sheet.set(sheets[0])
+                self.log_message(f"Refreshed sheets: {', '.join(sheets)} - Selected: {sheets[0]}")
                 self.on_sheet_selected()
+            else:
+                self.log_message("No sheets found in Excel file")
     
     def on_sheet_selected(self, event=None):
         """Handle sheet selection"""
         if self.selected_sheet.get():
+            self.log_message(f"Sheet selected: {self.selected_sheet.get()}")
             self.update_column_mappings()
             self.show_sheet_info()
     
@@ -454,6 +507,11 @@ class MainWindow:
         sheet_name = self.selected_sheet.get()
         if not sheet_name or not hasattr(self, 'current_excel_info'):
             return
+        
+        # Clear existing column mappings when switching sheets
+        # This prevents confusion with previous sheet's mappings
+        for var in self.column_mappings.values():
+            var.set("")
         
         # Get column names from selected sheet
         columns = self.js_excel_reader.get_sheet_column_names(
@@ -472,6 +530,8 @@ class MainWindow:
             if hasattr(self, 'mapping_widgets'):
                 for widget in self.mapping_widgets.values():
                     widget['values'] = self.available_columns
+                    
+            self.log_message("Column mappings cleared for new sheet - please remap columns")
         else:
             self.log_message(f"No column info found for sheet '{sheet_name}'")
     
@@ -583,6 +643,7 @@ class MainWindow:
         
         filename = f"Summary_{file_path.stem}_{timestamp}.xlsx"
         self.output_filename.set(filename)
+        self.log_message(f"Auto-generated filename: {filename}")
     
     def start_processing(self):
         """Start data processing"""
@@ -732,3 +793,22 @@ class MainWindow:
             var.set("")
         self.log_message("All column mappings cleared")
         messagebox.showinfo("Info", "All column mappings have been cleared!")
+    
+    def refresh_all_data(self):
+        """Manually refresh all data - useful for debugging or when data seems stale"""
+        if not self.current_file_path.get():
+            messagebox.showinfo("Info", "Please select a file first!")
+            return
+        
+        try:
+            current_file = self.current_file_path.get()
+            self.log_message("Manually refreshing all data...")
+            
+            # Reload the file completely
+            self.load_file(current_file)
+            
+            messagebox.showinfo("Info", "All data refreshed successfully!")
+            
+        except Exception as e:
+            self.logger.error(f"Error refreshing all data: {str(e)}")
+            messagebox.showerror("Error", f"Failed to refresh data: {str(e)}")
