@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import threading
 import os
+import sys
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -357,16 +358,30 @@ class MainWindow:
     
     def quick_select_file(self):
         """Quick select file from original_excel folder"""
-        original_excel_path = Path("original_excel")
+        from ..utils.constants import get_app_data_dir
         
-        if not original_excel_path.exists():
-            messagebox.showerror("Error", "original_excel folder not found!")
+        # Get the correct path for both dev and built versions
+        if getattr(sys, 'frozen', False):
+            # Running as built executable - look in executable directory
+            app_dir = os.path.dirname(sys.executable)
+            original_excel_path = os.path.join(app_dir, "original_excel")
+        else:
+            # Running in development
+            original_excel_path = Path("original_excel")
+        
+        if not os.path.exists(original_excel_path):
+            # Create the directory if it doesn't exist
+            try:
+                os.makedirs(original_excel_path, exist_ok=True)
+                messagebox.showinfo("Info", f"Created folder: {original_excel_path}\nPlease place your Excel files there and try again.")
+            except Exception as e:
+                messagebox.showerror("Error", f"Could not create folder {original_excel_path}: {str(e)}")
             return
         
         files = self.js_excel_reader.scan_excel_files(str(original_excel_path))
         
         if not files:
-            messagebox.showinfo("Info", "No Excel files found in original_excel folder!")
+            messagebox.showinfo("Info", f"No Excel files found in {original_excel_path}!\nPlease place Excel files there first.")
             return
         
         # Create file selection dialog
@@ -641,9 +656,19 @@ class MainWindow:
         file_path = Path(self.current_file_path.get())
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
+        # For built versions, show user where file will be saved
+        from ..utils.constants import get_safe_output_dir
+        output_dir = get_safe_output_dir()
+        
         filename = f"Summary_{file_path.stem}_{timestamp}.xlsx"
         self.output_filename.set(filename)
-        self.log_message(f"Auto-generated filename: {filename}")
+        
+        if getattr(sys, 'frozen', False):
+            # In built version, inform user of output location
+            self.log_message(f"Auto-generated filename: {filename}")
+            self.log_message(f"Output will be saved to: {output_dir}")
+        else:
+            self.log_message(f"Auto-generated filename: {filename}")
     
     def start_processing(self):
         """Start data processing"""
@@ -699,7 +724,18 @@ class MainWindow:
             if not all_raw_data:
                 raise ValueError("No data found or failed to read data")
             
-            self.root.after(0, lambda: self.log_message(f"Read {len(all_raw_data)} rows of data"))
+            # Validate data structure
+            valid_rows = 0
+            for i, row in enumerate(all_raw_data):
+                if row.get('month') and row.get('hsCode'):
+                    valid_rows += 1
+                if i < 3:  # Log first 3 rows for debugging
+                    self.root.after(0, lambda r=row: self.log_message(f"Sample row: month='{r.get('month')}', hsCode='{r.get('hsCode')}', item='{r.get('item')}'"))
+            
+            if valid_rows == 0:
+                raise ValueError("No valid data rows found (missing month or hsCode)")
+            
+            self.root.after(0, lambda: self.log_message(f"Read {len(all_raw_data)} rows, {valid_rows} valid for processing"))
             
             # Log sample data for debugging
             if all_raw_data:
@@ -723,26 +759,47 @@ class MainWindow:
             # Generate output using JavaScript-style logic
             self.root.after(0, lambda: self.status_var.set("Generating output file..."))
             
-            output_path = self.js_processor.process_data_like_javascript(
-                all_raw_data,
-                period_year,
-                global_incoterm,
-                incoterm_mode,
-                output_filename
-            )
-            
-            if not output_path:
-                raise ValueError("Failed to create output file")
+            try:
+                output_path = self.js_processor.process_data_like_javascript(
+                    all_raw_data,
+                    period_year,
+                    global_incoterm,
+                    incoterm_mode,
+                    output_filename
+                )
+                
+                if not output_path:
+                    raise ValueError("Processing completed but no output file path was returned")
+                    
+            except Exception as processing_error:
+                raise ValueError(f"Processing failed: {str(processing_error)}")
             
             self.root.after(0, lambda: self.progress_var.set(100))
             self.root.after(0, lambda: self.status_var.set("Processing completed successfully!"))
             self.root.after(0, lambda: self.log_message(f"Output saved to: {output_path}"))
             
-            # Show success message
-            self.root.after(0, lambda: messagebox.showinfo(
-                "Success", 
-                f"Processing completed successfully!\nOutput saved to: {output_path}"
-            ))
+            # Show success message with file location
+            def show_success():
+                from ..utils.constants import get_safe_output_dir
+                output_dir = get_safe_output_dir()
+                success_msg = f"Processing completed successfully!\n\nOutput saved to:\n{output_path}\n\nOutput folder:\n{output_dir}"
+                
+                # Ask user if they want to open the output folder
+                result = messagebox.askyesno(
+                    "Success", 
+                    success_msg + "\n\nWould you like to open the output folder?",
+                    icon='question'
+                )
+                
+                if result:
+                    try:
+                        # Open the output folder
+                        import subprocess
+                        subprocess.Popen(f'explorer "{os.path.dirname(output_path)}"')
+                    except Exception as e:
+                        self.log_message(f"Could not open output folder: {str(e)}")
+            
+            self.root.after(0, show_success)
             
         except Exception as e:
             error_msg = str(e)

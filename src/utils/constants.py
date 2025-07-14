@@ -19,6 +19,35 @@ DEFAULT_COLUMN_MAPPING = {
 }
 
 # Default values
-DEFAULT_INPUT_FOLDER = "original_excel"
-DEFAULT_OUTPUT_FOLDER = "processed_excel"
+import os
+import sys
+
+def get_app_data_dir():
+    """Get the application data directory that works in both dev and built versions"""
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable
+        app_dir = os.path.dirname(sys.executable)
+    else:
+        # Running in development
+        app_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return app_dir
+
+def get_safe_output_dir():
+    """Get a safe output directory that works in both dev and built versions"""
+    if getattr(sys, 'frozen', False):
+        # For built version, use user's Documents folder
+        import os
+        documents_path = os.path.join(os.path.expanduser("~"), "Documents")
+        output_dir = os.path.join(documents_path, "ExcelSummaryMaker_Output")
+    else:
+        # For development, use relative path
+        app_dir = get_app_data_dir()
+        output_dir = os.path.join(app_dir, "processed_excel")
+    
+    # Ensure directory exists
+    os.makedirs(output_dir, exist_ok=True)
+    return output_dir
+
+DEFAULT_INPUT_FOLDER = os.path.join(get_app_data_dir(), "original_excel")
+DEFAULT_OUTPUT_FOLDER = get_safe_output_dir()
 DEFAULT_SHEET_NAME = "DATA OLAH"

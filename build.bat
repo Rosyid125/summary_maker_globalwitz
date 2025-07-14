@@ -61,7 +61,7 @@ if not exist "main.py" (
 REM Run PyInstaller (using --onedir for faster startup and smaller main exe)
 echo.
 echo Starting PyInstaller build...
-pyinstaller --onedir --windowed --name=ExcelSummaryMaker --add-data="src;src" --add-data="original_excel;original_excel" --add-data="processed_excel;processed_excel" --add-data="logs;logs" --hidden-import=tkinter --hidden-import=tkinter.ttk --hidden-import=pandas --hidden-import=openpyxl --hidden-import=numpy --hidden-import=xlsxwriter --hidden-import=dateutil --collect-all=tkinter --collect-all=openpyxl --collect-all=pandas --clean main.py
+python -m PyInstaller --onedir --windowed --name=ExcelSummaryMaker --add-data="src;src" --add-data="original_excel;original_excel" --add-data="processed_excel;processed_excel" --add-data="logs;logs" --hidden-import=tkinter --hidden-import=tkinter.ttk --hidden-import=pandas --hidden-import=openpyxl --hidden-import=numpy --hidden-import=xlsxwriter --hidden-import=dateutil --collect-all=tkinter --collect-all=openpyxl --collect-all=pandas --clean main.py
 
 if errorlevel 1 (
     echo.
@@ -92,9 +92,14 @@ if exist "DISTRIBUTION_README.md" copy "DISTRIBUTION_README.md" "dist\ExcelSumma
 
 REM Create launcher files
 echo Creating launcher files...
-echo @echo off > "dist\ExcelSummaryMaker\Launch_ExcelSummaryMaker.bat"
-echo cd /d "%%~dp0" >> "dist\ExcelSummaryMaker\Launch_ExcelSummaryMaker.bat"
-echo start "" "ExcelSummaryMaker.exe" >> "dist\ExcelSummaryMaker\Launch_ExcelSummaryMaker.bat"
+if exist "launcher_template.bat" (
+    copy "launcher_template.bat" "dist\ExcelSummaryMaker\Launch_ExcelSummaryMaker.bat" >nul
+) else (
+    echo @echo off > "dist\ExcelSummaryMaker\Launch_ExcelSummaryMaker.bat"
+    echo cd /d "%%~dp0" >> "dist\ExcelSummaryMaker\Launch_ExcelSummaryMaker.bat"
+    echo if not exist "original_excel" mkdir "original_excel" >> "dist\ExcelSummaryMaker\Launch_ExcelSummaryMaker.bat"
+    echo start "" "ExcelSummaryMaker.exe" >> "dist\ExcelSummaryMaker\Launch_ExcelSummaryMaker.bat"
+)
 
 REM Create shortcut creation script
 echo Set oWS = WScript.CreateObject("WScript.Shell") > "dist\ExcelSummaryMaker\CreateShortcut.vbs"
@@ -123,11 +128,17 @@ echo Main executable: dist\ExcelSummaryMaker\ExcelSummaryMaker.exe
 echo Main exe size: %sizeMB% MB
 echo Total distribution size: %totalSizeMB% MB
 echo.
+echo IMPORTANT CHANGES FOR OUTPUT FILES:
+echo - Input files: Place in 'original_excel' folder next to exe
+echo - Output files: Saved to user's Documents\ExcelSummaryMaker_Output\
+echo - This prevents permission issues in Program Files
+echo.
 echo BENEFITS OF THIS BUILD:
 echo - Faster startup time (no extraction needed)
 echo - Smaller main executable file
 echo - Libraries organized in separate folder
 echo - Easy to distribute entire folder
+echo - Better file path handling for different Windows versions
 echo.
 echo You can distribute the entire 'dist\ExcelSummaryMaker' folder to users.
 echo Opening dist folder...

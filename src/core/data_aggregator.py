@@ -35,100 +35,126 @@ class DataAggregator:
         Returns:
             Dict with 'summaryLvl1' and 'summaryLvl2' keys
         """
-        monthly_summary = {}
-        
-        self.logger.info(f"    Starting aggregation for {len(data)} rows")
-        
-        # Debug: Show sample data being processed
-        for i, row in enumerate(data[:3]):
-            self.logger.info(f"    Sample row {i}: month='{row.get('month')}', hsCode='{row.get('hsCode')}', date='{row.get('date')}'")
-        
-        for index, row in enumerate(data):
-            # Required columns: month, hsCode
-            # gsm, item, addOn can be '-' or empty string and are valid for grouping
-            if not row.get('month') or row.get('month') == "-" or not row.get('hsCode') or row.get('hsCode') == "-":
-                self.logger.debug(f"    Skipping row {index}: month='{row.get('month')}', hsCode='{row.get('hsCode')}'")
-                continue
+        try:
+            monthly_summary = {}
             
-            # If GSM, ITEM, or ADD ON don't exist (None/undefined), treat as empty string for grouping
-            # If value is string "-", it will be treated as unique "-" value
-            gsm_value = self._safe_string_value(row.get('gsm'))
-            item_value = self._safe_string_value(row.get('item'))
-            add_on_value = self._safe_string_value(row.get('addOn'))
+            self.logger.info(f"    Starting aggregation for {len(data)} rows")
             
-            key = f"{row['month']}-{row['hsCode']}-{item_value}-{gsm_value}-{add_on_value}"
+            if not data:
+                self.logger.warning("    No data to aggregate")
+                return {'summaryLvl1': [], 'summaryLvl2': []}
             
-            if key not in monthly_summary:
-                monthly_summary[key] = {
-                    'month': row['month'],
-                    'hsCode': self._safe_string_value(row['hsCode']),
-                    'item': item_value,
-                    'gsm': gsm_value,
-                    'addOn': add_on_value,
-                    'usdQtyUnits': [],
-                    'totalQty': 0
-                }
+            # Debug: Show sample data being processed
+            for i, row in enumerate(data[:3]):
+                self.logger.info(f"    Sample row {i}: month='{row.get('month')}', hsCode='{row.get('hsCode')}', date='{row.get('date')}'")
             
-            usd_qty = row.get('usdQtyUnit', 0)  # Fixed field name to match Excel reader
-            qty = row.get('qty', 0)
+            valid_rows_processed = 0
             
-            # Debug: Log price values for first few rows
-            if index < 5:
-                self.logger.info(f"    Row {index}: usdQtyUnit={usd_qty}, qty={qty}")
+            for index, row in enumerate(data):
+                # Required columns: month, hsCode
+                # gsm, item, addOn can be '-' or empty string and are valid for grouping
+                if not row.get('month') or row.get('month') == "-" or not row.get('hsCode') or row.get('hsCode') == "-":
+                    self.logger.debug(f"    Skipping row {index}: month='{row.get('month')}', hsCode='{row.get('hsCode')}'")
+                    continue
+                
+                # If GSM, ITEM, or ADD ON don't exist (None/undefined), treat as empty string for grouping
+                # If value is string "-", it will be treated as unique "-" value
+                gsm_value = self._safe_string_value(row.get('gsm'))
+                item_value = self._safe_string_value(row.get('item'))
+                add_on_value = self._safe_string_value(row.get('addOn'))
+                
+                key = f"{row['month']}-{row['hsCode']}-{item_value}-{gsm_value}-{add_on_value}"
+                
+                if key not in monthly_summary:
+                    monthly_summary[key] = {
+                        'month': row['month'],
+                        'hsCode': self._safe_string_value(row['hsCode']),
+                        'item': item_value,
+                        'gsm': gsm_value,
+                        'addOn': add_on_value,
+                        'usdQtyUnits': [],
+                        'totalQty': 0
+                    }
+                
+                usd_qty = row.get('usdQtyUnit', 0)  # Fixed field name to match Excel reader
+                qty = row.get('qty', 0)
+                
+                # Ensure numeric values
+                try:
+                    usd_qty = float(usd_qty) if usd_qty is not None else 0
+                except (ValueError, TypeError):
+                    usd_qty = 0
+                    
+                try:
+                    qty = float(qty) if qty is not None else 0
+                except (ValueError, TypeError):
+                    qty = 0
+                
+                # Debug: Log price values for first few rows
+                if index < 5:
+                    self.logger.info(f"    Row {index}: usdQtyUnit={usd_qty}, qty={qty}")
+                
+                if usd_qty > 0:  # Only add positive prices
+                    monthly_summary[key]['usdQtyUnits'].append(usd_qty)
+                monthly_summary[key]['totalQty'] += qty
+                valid_rows_processed += 1
             
-            monthly_summary[key]['usdQtyUnits'].append(usd_qty)
-            monthly_summary[key]['totalQty'] += qty
-        
-        self.logger.info(f"    Created {len(monthly_summary)} monthly groups")
-        
-        # Create summaryLvl1Data
-        summary_lvl1_data = []
-        for group in monthly_summary.values():
-            summary_lvl1_data.append({
-                'month': group['month'],
-                'hsCode': self._safe_string_value(group['hsCode']),
-                'item': self._safe_string_value(group['item']),
-                'gsm': self._safe_string_value(group['gsm']),
-                'addOn': self._safe_string_value(group['addOn']),
-                'avgPrice': average_greater_than_zero(group['usdQtyUnits']),
-                'totalQty': group['totalQty']
-            })
-        
-        # Create recapSummary
-        recap_summary = {}
-        for row in summary_lvl1_data:
-            key = f"{row['hsCode']}-{row['item']}-{row['gsm']}-{row['addOn']}"
-            if key not in recap_summary:
-                recap_summary[key] = {
-                    'hsCode': self._safe_string_value(row['hsCode']),
-                    'item': self._safe_string_value(row['item']),
-                    'gsm': self._safe_string_value(row['gsm']),
-                    'addOn': self._safe_string_value(row['addOn']),
-                    'avgPrices': [],
-                    'totalQty': 0
-                }
-            recap_summary[key]['avgPrices'].append(row['avgPrice'])
-            recap_summary[key]['totalQty'] += row['totalQty']
-        
-        # Create summaryLvl2Data
-        summary_lvl2_data = []
-        for group in recap_summary.values():
-            summary_lvl2_data.append({
-                'hsCode': self._safe_string_value(group['hsCode']),
-                'item': self._safe_string_value(group['item']), 
-                'gsm': self._safe_string_value(group['gsm']),
-                'addOn': self._safe_string_value(group['addOn']),
-                'avgOfSummaryPrice': average_greater_than_zero(group['avgPrices']),
-                'totalOfSummaryQty': group['totalQty']
-            })
-        
-        self.logger.info(f"    Final result: Level1={len(summary_lvl1_data)}, Level2={len(summary_lvl2_data)}")
-        
-        return {
-            'summaryLvl1': summary_lvl1_data,
-            'summaryLvl2': summary_lvl2_data
-        }
-    
+            self.logger.info(f"    Processed {valid_rows_processed} valid rows out of {len(data)} total rows")
+            self.logger.info(f"    Created {len(monthly_summary)} monthly groups")
+            
+            # Create summaryLvl1Data
+            summary_lvl1_data = []
+            for group in monthly_summary.values():
+                summary_lvl1_data.append({
+                    'month': group['month'],
+                    'hsCode': self._safe_string_value(group['hsCode']),
+                    'item': self._safe_string_value(group['item']),
+                    'gsm': self._safe_string_value(group['gsm']),
+                    'addOn': self._safe_string_value(group['addOn']),
+                    'avgPrice': average_greater_than_zero(group['usdQtyUnits']),
+                    'totalQty': group['totalQty']
+                })
+            
+            # Create recapSummary
+            recap_summary = {}
+            for row in summary_lvl1_data:
+                key = f"{row['hsCode']}-{row['item']}-{row['gsm']}-{row['addOn']}"
+                if key not in recap_summary:
+                    recap_summary[key] = {
+                        'hsCode': self._safe_string_value(row['hsCode']),
+                        'item': self._safe_string_value(row['item']),
+                        'gsm': self._safe_string_value(row['gsm']),
+                        'addOn': self._safe_string_value(row['addOn']),
+                        'avgPrices': [],
+                        'totalQty': 0
+                    }
+                if row['avgPrice'] and row['avgPrice'] > 0:
+                    recap_summary[key]['avgPrices'].append(row['avgPrice'])
+                recap_summary[key]['totalQty'] += row['totalQty']
+            
+            # Create summaryLvl2Data
+            summary_lvl2_data = []
+            for group in recap_summary.values():
+                summary_lvl2_data.append({
+                    'hsCode': self._safe_string_value(group['hsCode']),
+                    'item': self._safe_string_value(group['item']), 
+                    'gsm': self._safe_string_value(group['gsm']),
+                    'addOn': self._safe_string_value(group['addOn']),
+                    'avgOfSummaryPrice': average_greater_than_zero(group['avgPrices']),
+                    'totalOfSummaryQty': group['totalQty']
+                })
+            
+            self.logger.info(f"    Final result: Level1={len(summary_lvl1_data)}, Level2={len(summary_lvl2_data)}")
+            
+            return {
+                'summaryLvl1': summary_lvl1_data,
+                'summaryLvl2': summary_lvl2_data
+            }
+            
+        except Exception as e:
+            self.logger.error(f"    Error in perform_aggregation: {str(e)}")
+            return {'summaryLvl1': [], 'summaryLvl2': []}
+
     def aggregate_data(self, df: pd.DataFrame, year: int = None) -> Dict[str, Any]:
         """
         Aggregate data by importer and create summary tables

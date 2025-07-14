@@ -218,51 +218,115 @@ class OutputFormatter:
         Returns:
             str: Path to output file
         """
-        if not os.path.exists(DEFAULT_OUTPUT_FOLDER):
-            os.makedirs(DEFAULT_OUTPUT_FOLDER, exist_ok=True)
-        
-        output_file = os.path.join(DEFAULT_OUTPUT_FOLDER, output_filename)
-        
-        # Define colors (matching JavaScript colors)
-        colors = {
-            'period': '#7030A0',
-            'supplierCols': '#002060',
-            'q1': '#FFC000',
-            'q2': '#00B050',
-            'q3': '#FFFF00',
-            'q4': '#00B0F0',
-            'recap': '#002060',
-            'totalPerItemTitle': '#FF0000',
-            'textWhite': '#FFFFFF',
-            'textBlack': '#000000'
-        }
-        
-        # Create workbook with xlsxwriter
-        workbook = xlsxwriter.Workbook(output_file)
-        
-        # Define formats
-        formats = self._create_formats(workbook, colors)
-        
-        for sheet_info in workbook_data:
-            worksheet = workbook.add_worksheet(sheet_info['name'])
+        try:
+            self.logger.info(f"Starting write_output_to_file with {len(workbook_data)} sheets")
             
-            # Add period title
-            if period_year:
-                period_title = f"{period_year} PERIODE"
-                worksheet.merge_range(0, 0, 0, sheet_info['totalColumns'] - 1, period_title, formats['period_title'])
-                worksheet.set_row(0, 20)
+            # Validate workbook data
+            if not workbook_data:
+                raise ValueError("No workbook data provided")
             
-            # Add sheet content
-            start_row = 1 if period_year else 0
-            current_row = start_row
+            # Check that each sheet has required structure
+            for i, sheet_info in enumerate(workbook_data):
+                if not isinstance(sheet_info, dict):
+                    raise ValueError(f"Sheet {i} is not a dictionary")
+                if 'name' not in sheet_info:
+                    raise ValueError(f"Sheet {i} missing 'name' field")
+                if 'allRowsForSheetContent' not in sheet_info:
+                    raise ValueError(f"Sheet {i} missing 'allRowsForSheetContent' field")
+                if 'totalColumns' not in sheet_info:
+                    raise ValueError(f"Sheet {i} missing 'totalColumns' field")
+                self.logger.info(f"Sheet {i}: '{sheet_info['name']}' - {len(sheet_info['allRowsForSheetContent'])} rows, {sheet_info['totalColumns']} columns")
             
-            # Apply advanced formatting (this will also write the data)
-            self._apply_advanced_formatting(worksheet, sheet_info, formats, start_row)
-        
-        workbook.close()
-        self.logger.info(f"Output saved to: {output_file}")
-        
-        return output_file
+            # Get absolute path for output folder with fallback
+            try:
+                output_folder = os.path.abspath(DEFAULT_OUTPUT_FOLDER)
+                self.logger.info(f"Primary output folder: {output_folder}")
+                
+                # Test write access
+                test_file = os.path.join(output_folder, "test_write.tmp")
+                with open(test_file, 'w') as f:
+                    f.write("test")
+                os.remove(test_file)
+                self.logger.info("Write permissions confirmed for primary folder")
+                
+            except Exception as primary_error:
+                self.logger.warning(f"Primary output folder failed: {primary_error}")
+                # Fallback to user's desktop
+                desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
+                output_folder = os.path.join(desktop_path, "ExcelSummaryMaker_Output")
+                self.logger.info(f"Using fallback output folder: {output_folder}")
+                
+                try:
+                    os.makedirs(output_folder, exist_ok=True)
+                    # Test write access to fallback
+                    test_file = os.path.join(output_folder, "test_write.tmp")
+                    with open(test_file, 'w') as f:
+                        f.write("test")
+                    os.remove(test_file)
+                    self.logger.info("Write permissions confirmed for fallback folder")
+                except Exception as fallback_error:
+                    raise Exception(f"No writable output folder found. Primary: {primary_error}, Fallback: {fallback_error}")
+            
+            if not os.path.exists(output_folder):
+                self.logger.info(f"Creating output directory: {output_folder}")
+                os.makedirs(output_folder, exist_ok=True)
+            
+            output_file = os.path.join(output_folder, output_filename)
+            self.logger.info(f"Output file path: {output_file}")
+            
+            # Define colors (matching JavaScript colors)
+            colors = {
+                'period': '#7030A0',
+                'supplierCols': '#002060',
+                'q1': '#FFC000',
+                'q2': '#00B050',
+                'q3': '#FFFF00',
+                'q4': '#00B0F0',
+                'recap': '#002060',
+                'totalPerItemTitle': '#FF0000',
+                'textWhite': '#FFFFFF',
+                'textBlack': '#000000'
+            }
+            
+            # Create workbook with xlsxwriter
+            self.logger.info("Creating xlsxwriter workbook...")
+            workbook = xlsxwriter.Workbook(output_file)
+            
+            # Define formats
+            formats = self._create_formats(workbook, colors)
+            
+            for i, sheet_info in enumerate(workbook_data):
+                self.logger.info(f"Processing sheet {i+1}/{len(workbook_data)}: {sheet_info['name']}")
+                worksheet = workbook.add_worksheet(sheet_info['name'])
+                
+                # Add period title
+                if period_year:
+                    period_title = f"{period_year} PERIODE"
+                    worksheet.merge_range(0, 0, 0, sheet_info['totalColumns'] - 1, period_title, formats['period_title'])
+                    worksheet.set_row(0, 20)
+                
+                # Add sheet content
+                start_row = 1 if period_year else 0
+                current_row = start_row
+                
+                # Apply advanced formatting (this will also write the data)
+                self.logger.info(f"Applying formatting to sheet: {sheet_info['name']}")
+                self._apply_advanced_formatting(worksheet, sheet_info, formats, start_row)
+            
+            self.logger.info("Closing workbook...")
+            workbook.close()
+            
+            # Verify the file was created
+            if os.path.exists(output_file):
+                file_size = os.path.getsize(output_file)
+                self.logger.info(f"Output file created successfully: {output_file} (size: {file_size} bytes)")
+                return output_file
+            else:
+                raise Exception(f"Output file was not created: {output_file}")
+                
+        except Exception as e:
+            self.logger.error(f"Error in write_output_to_file: {str(e)}")
+            raise Exception(f"Failed to write output file: {str(e)}")
     
     def _create_formats(self, workbook, colors):
         """Create all the formats needed for the Excel output"""
