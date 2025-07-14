@@ -34,15 +34,9 @@ def get_app_data_dir():
 
 def get_safe_output_dir():
     """Get a safe output directory that works in both dev and built versions"""
-    if getattr(sys, 'frozen', False):
-        # For built version, use user's Documents folder
-        import os
-        documents_path = os.path.join(os.path.expanduser("~"), "Documents")
-        output_dir = os.path.join(documents_path, "ExcelSummaryMaker_Output")
-    else:
-        # For development, use relative path
-        app_dir = get_app_data_dir()
-        output_dir = os.path.join(app_dir, "processed_excel")
+    # Always use the processed_excel folder relative to the application directory
+    app_dir = get_app_data_dir()
+    output_dir = os.path.join(app_dir, "processed_excel")
     
     # Ensure directory exists
     os.makedirs(output_dir, exist_ok=True)
