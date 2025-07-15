@@ -4,14 +4,14 @@ Output Formatter Module - Handles Excel output generation with formatting
 
 import pandas as pd
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
+from openpyxl.styles import Font, Border, Side, Alignment, PatternFill
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.utils import get_column_letter
 import os
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
-from ..utils.helpers import format_currency, get_month_name, format_american_number
+from ..utils.helpers import format_currency, get_month_name, format_american_number, format_qty_with_precision
 
 class OutputFormatter:
     """Handles Excel output generation with complex formatting"""
@@ -127,7 +127,7 @@ class OutputFormatter:
         # Summary data
         summary_items = [
             ("Total Records", summary.get('total_records', 0)),
-            ("Total Quantity", format_american_number(summary.get('total_quantity', 0), 0)),
+            ("Total Quantity", format_qty_with_precision(summary.get('total_quantity', 0))),
             ("Average Unit Price", f"{incoterm} {format_american_number(summary.get('avg_unit_price', 0))}" if summary.get('avg_unit_price') else "N/A"),
             ("Total Value", f"{incoterm} {format_american_number(summary.get('total_value', 0))}"),
             ("Unique Suppliers", summary.get('unique_suppliers', 0)),
@@ -224,7 +224,7 @@ class OutputFormatter:
         for row_data in supplier_data:
             values = [
                 row_data.get('supplier', ''),
-                format_american_number(row_data.get('total_quantity', 0), 0),
+                format_qty_with_precision(row_data.get('total_quantity', 0)),
                 format_american_number(row_data.get('avg_unit_price', 0)) if row_data.get('avg_unit_price') else "N/A",
                 format_american_number(row_data.get('total_value', 0)),
                 row_data.get('record_count', 0),
@@ -270,7 +270,7 @@ class OutputFormatter:
         for row_data in item_data:
             values = [
                 row_data.get('item', ''),
-                format_american_number(row_data.get('total_quantity', 0), 0),
+                format_qty_with_precision(row_data.get('total_quantity', 0)),
                 format_american_number(row_data.get('avg_unit_price', 0)) if row_data.get('avg_unit_price') else "N/A",
                 format_american_number(row_data.get('total_value', 0)),
                 row_data.get('record_count', 0),
@@ -332,7 +332,7 @@ class OutputFormatter:
                 values = [
                     importer_name,
                     overall.get('total_records', 0),
-                    format_american_number(overall.get('total_quantity', 0), 0),
+                    format_qty_with_precision(overall.get('total_quantity', 0)),
                     format_american_number(overall.get('total_value', 0)),
                     overall.get('unique_suppliers', 0),
                     overall.get('unique_items', 0)
@@ -357,7 +357,7 @@ class OutputFormatter:
             total_values = [
                 "TOTAL",
                 total_records,
-                format_american_number(total_quantity, 0),
+                format_qty_with_precision(total_quantity),
                 format_american_number(total_value),
                 "",  # Can't sum unique suppliers across importers
                 ""   # Can't sum unique items across importers

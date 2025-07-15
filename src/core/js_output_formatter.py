@@ -9,7 +9,7 @@ import os
 from typing import Dict, List, Any, Optional
 
 from ..utils.constants import MONTH_ORDER, DEFAULT_OUTPUT_FOLDER
-from ..utils.helpers import average_greater_than_zero, format_american_number, format_price_with_precision
+from ..utils.helpers import average_greater_than_zero, format_american_number, format_price_with_precision, format_qty_with_precision
 
 class OutputFormatter:
     """Handles Excel output formatting with JavaScript-compatible logic"""
@@ -128,7 +128,7 @@ class OutputFormatter:
                 
                 if month_data:
                     avg_price = format_price_with_precision(month_data['avgPrice']) if month_data['avgPrice'] else "0"
-                    qty = format_american_number(month_data['totalQty'], 0)
+                    qty = format_qty_with_precision(month_data['totalQty'])
                     data_row.extend([avg_price, qty])
                     monthly_totals[month_index] += month_data['totalQty'] if month_data['totalQty'] else 0
                 else:
@@ -148,7 +148,7 @@ class OutputFormatter:
                 avg_price = format_price_with_precision(recap_data['avgOfSummaryPrice']) if recap_data['avgOfSummaryPrice'] else "0"
                 # Get incoterm based on mode
                 combo_incoterm = self.get_incoterm_for_combination(combo, raw_data or [], incoterm_mode, incoterm_value)
-                data_row.extend([avg_price, combo_incoterm, format_american_number(recap_data['totalOfSummaryQty'], 0)])
+                data_row.extend([avg_price, combo_incoterm, format_qty_with_precision(recap_data['totalOfSummaryQty'])])
             else:
                 data_row.extend(["-", "-", "-"])
             
@@ -162,9 +162,9 @@ class OutputFormatter:
             total_qty_per_mo_row = ["TOTAL QTY PER MO", "-", "-", "-", "-"]
             for total in monthly_totals:
                 # If total is 0 or None, show "-" instead of empty cell
-                display_total = format_american_number(total, 0) if (isinstance(total, (int, float)) and total > 0) else "-"
+                display_total = format_qty_with_precision(total) if (isinstance(total, (int, float)) and total > 0) else "-"
                 total_qty_per_mo_row.extend([display_total, "-"])
-            total_qty_per_mo_row.extend([format_american_number(overall_total_qty, 0), "-", "-"])
+            total_qty_per_mo_row.extend([format_qty_with_precision(overall_total_qty), "-", "-"])
             group_block_rows.append(total_qty_per_mo_row)
             
             # Add quarterly totals
@@ -182,16 +182,16 @@ class OutputFormatter:
             
             total_qty_per_quartal_row = ["TOTAL QTY PER QUARTAL", "-", "-", "-", "-"]
             # Q1 (Jan-Mar)
-            q1_display = format_american_number(quarterly_totals[0], 0) if quarterly_totals[0] > 0 else "-"
+            q1_display = format_qty_with_precision(quarterly_totals[0]) if quarterly_totals[0] > 0 else "-"
             total_qty_per_quartal_row.extend([q1_display, "-", "-", "-", "-", "-"])
             # Q2 (Apr-Jun)  
-            q2_display = format_american_number(quarterly_totals[1], 0) if quarterly_totals[1] > 0 else "-"
+            q2_display = format_qty_with_precision(quarterly_totals[1]) if quarterly_totals[1] > 0 else "-"
             total_qty_per_quartal_row.extend([q2_display, "-", "-", "-", "-", "-"])
             # Q3 (Jul-Sep)
-            q3_display = format_american_number(quarterly_totals[2], 0) if quarterly_totals[2] > 0 else "-"
+            q3_display = format_qty_with_precision(quarterly_totals[2]) if quarterly_totals[2] > 0 else "-"
             total_qty_per_quartal_row.extend([q3_display, "-", "-", "-", "-", "-"])
             # Q4 (Oct-Dec)
-            q4_display = format_american_number(quarterly_totals[3], 0) if quarterly_totals[3] > 0 else "-"
+            q4_display = format_qty_with_precision(quarterly_totals[3]) if quarterly_totals[3] > 0 else "-"
             total_qty_per_quartal_row.extend([q4_display, "-", "-", "-", "-", "-"])
             total_qty_per_quartal_row.extend(["-", "-", "-"])
             group_block_rows.append(total_qty_per_quartal_row)
