@@ -432,6 +432,14 @@ class OutputFormatter:
             'num_format': '#,##0.000'  # Exactly 3 decimal places
         })
         
+        # Text format for GSM and other string fields
+        formats['text_cell'] = workbook.add_format({
+            'align': 'center',
+            'valign': 'vcenter',
+            'border': 1,
+            'num_format': '@'  # Text format
+        })
+        
         # Number format for quantities (no decimal places for whole numbers, 3 for decimals)
         formats['qty_cell'] = workbook.add_format({
             'align': 'center',
@@ -493,15 +501,23 @@ class OutputFormatter:
             if row_idx in rows_with_content:
                 # Apply format with borders for content rows
                 for col_idx in range(total_cols):
-                    worksheet.write(actual_row, col_idx, 
-                                  row_data[col_idx] if col_idx < len(row_data) else "", 
-                                  formats['data_cell'])
+                    cell_value = row_data[col_idx] if col_idx < len(row_data) else ""
+                    
+                    # Use text format for GSM column (column 3, zero-indexed)
+                    if col_idx == 3:  # GSM column
+                        worksheet.write(actual_row, col_idx, cell_value, formats['text_cell'])
+                    else:
+                        worksheet.write(actual_row, col_idx, cell_value, formats['data_cell'])
             else:
                 # Apply format without borders for separator rows
                 for col_idx in range(total_cols):
-                    worksheet.write(actual_row, col_idx, 
-                                  row_data[col_idx] if col_idx < len(row_data) else "", 
-                                  formats['no_border_cell'])
+                    cell_value = row_data[col_idx] if col_idx < len(row_data) else ""
+                    
+                    # Use text format for GSM column (column 3, zero-indexed)
+                    if col_idx == 3:  # GSM column
+                        worksheet.write(actual_row, col_idx, cell_value, formats['text_cell'])
+                    else:
+                        worksheet.write(actual_row, col_idx, cell_value, formats['no_border_cell'])
         
         # Format supplier group headers
         current_row = start_row
