@@ -266,20 +266,25 @@ def format_currency(value, currency="USD"):
 def format_american_number(value, decimals=2):
     """
     Format number using American format: comma as thousands separator, dot as decimal separator
+    Replace zero values with "-" for better readability
     
     Args:
         value: Numeric value to format
         decimals: Number of decimal places (default: 2, or 'auto' for full precision)
     
     Returns:
-        str: Formatted number string (e.g., "10,000.00" or "2.096666666666667")
+        str: Formatted number string (e.g., "10,000.00" or "2.096666666666667") or "-" for zero values
     """
     if value is None or pd.isna(value):
-        return "0.00" if decimals > 0 else "0"
+        return "-"
     
     try:
         # Convert to float to ensure proper formatting
         numeric_value = float(value)
+        
+        # Return "-" for zero values
+        if numeric_value == 0:
+            return "-"
         
         # If decimals is 'auto', show full precision without rounding
         if decimals == 'auto':
@@ -293,81 +298,76 @@ def format_american_number(value, decimals=2):
         else:
             return f"{numeric_value:,.0f}"
     except (ValueError, TypeError):
-        return "0.00" if decimals > 0 else "0"
+        return "-"
 
 def format_price_with_precision(value, max_decimals=3):
     """
     Format price with controlled precision and proper rounding
+    Always shows exactly 3 decimal places and replaces zero values with "-"
     
     Args:
         value: Numeric value to format
         max_decimals: Maximum decimal places to show (default: 3)
     
     Returns:
-        str: Formatted price string with proper rounding (e.g., "2.093")
+        str: Formatted price string with exactly 3 decimal places (e.g., "2.223") or "-" for zero values
     """
     if value is None or pd.isna(value):
-        return "0"
+        return "-"
     
     try:
         # Convert to float to ensure proper formatting
         numeric_value = float(value)
         
-        # Handle zero values
+        # Return "-" for zero values
         if numeric_value == 0:
-            return "0"
+            return "-"
         
         # Round to specified decimal places
         rounded_value = round(numeric_value, max_decimals)
         
-        # Format with thousands separator and remove unnecessary trailing zeros
-        if rounded_value == int(rounded_value):
-            # If it's a whole number after rounding, show without decimals
-            return f"{int(rounded_value):,}"
-        else:
-            # Format with up to max_decimals, removing trailing zeros
-            formatted = f"{rounded_value:,.{max_decimals}f}".rstrip('0').rstrip('.')
-            return formatted
+        # Format with thousands separator and exactly max_decimals decimal places
+        return f"{rounded_value:,.{max_decimals}f}"
             
     except (ValueError, TypeError):
-        return "0"
+        return "-"
 
 def format_qty_with_precision(value, max_decimals=3):
     """
     Format quantity with controlled precision and proper rounding
+    Always shows exactly 3 decimal places for non-integer values and replaces zero values with "-"
     
     Args:
         value: Numeric value to format
         max_decimals: Maximum decimal places to show (default: 3)
     
     Returns:
-        str: Formatted quantity string with proper rounding (e.g., "2.457")
+        str: Formatted quantity string with proper rounding (e.g., "2,457.000" or "19,170") or "-" for zero values
     """
     if value is None or pd.isna(value):
-        return "0"
+        return "-"
     
     try:
         # Convert to float to ensure proper formatting
         numeric_value = float(value)
         
-        # Handle zero values
+        # Return "-" for zero values
         if numeric_value == 0:
-            return "0"
+            return "-"
         
         # Round to specified decimal places
         rounded_value = round(numeric_value, max_decimals)
         
-        # Format with thousands separator and remove unnecessary trailing zeros
+        # Check if it's a whole number after rounding
         if rounded_value == int(rounded_value):
-            # If it's a whole number after rounding, show without decimals
+            # If it's a whole number, show without decimals but with thousand separators
             return f"{int(rounded_value):,}"
         else:
-            # Format with up to max_decimals, removing trailing zeros
-            formatted = f"{rounded_value:,.{max_decimals}f}".rstrip('0').rstrip('.')
-            return formatted
+            # Format with exactly max_decimals decimal places
+            return f"{rounded_value:,.{max_decimals}f}"
             
     except (ValueError, TypeError):
-        return "0"
+        return "-"
 
 def average_greater_than_zero(arr):
     """

@@ -8,6 +8,7 @@ from typing import Dict, List, Any, Optional
 import os
 
 from .data_aggregator import DataAggregator
+from ..utils.helpers import format_qty_with_precision
 from .js_output_formatter import OutputFormatter
 from ..utils.constants import MONTH_ORDER, DEFAULT_OUTPUT_FOLDER
 from ..utils.helpers import average_greater_than_zero
@@ -133,8 +134,10 @@ class JSStyleProcessor:
                 
                 total_all_mo_row = ["TOTAL ALL SUPPLIER PER MO", None, None, None, None]
                 for total in sheet_overall_monthly_totals:
-                    total_all_mo_row.extend([total, None])
-                total_all_mo_row.extend([grand_total_all_suppliers, None, None])
+                    formatted_total = format_qty_with_precision(total) if total > 0 else "-"
+                    total_all_mo_row.extend([formatted_total, None])
+                grand_total_formatted = format_qty_with_precision(grand_total_all_suppliers) if grand_total_all_suppliers > 0 else "-"
+                total_all_mo_row.extend([grand_total_formatted, None, None])
                 all_rows_for_sheet_content.append(total_all_mo_row)
                 
                 # Calculate quarterly totals
@@ -150,10 +153,9 @@ class JSStyleProcessor:
                         quarterly_totals_all[3] += total
                 
                 total_all_quartal_row = ["TOTAL ALL SUPPLIER PER QUARTAL", None, None, None, None]
-                total_all_quartal_row.extend([quarterly_totals_all[0], None, None, None, None, None])
-                total_all_quartal_row.extend([quarterly_totals_all[1], None, None, None, None, None])
-                total_all_quartal_row.extend([quarterly_totals_all[2], None, None, None, None, None])
-                total_all_quartal_row.extend([quarterly_totals_all[3], None, None, None, None, None])
+                for quarterly_total in quarterly_totals_all:
+                    formatted_quarterly = format_qty_with_precision(quarterly_total) if quarterly_total > 0 else "-"
+                    total_all_quartal_row.extend([formatted_quarterly, None, None, None, None, None])
                 total_all_quartal_row.extend([None, None, None])
                 all_rows_for_sheet_content.append(total_all_quartal_row)
                 
@@ -175,8 +177,10 @@ class JSStyleProcessor:
                     item_data = item_summary_data_for_sheet[item_key]
                     item_row = [f"{item_data['item']} {item_data['gsm']} {item_data['addOn']}", None, None, None, None]
                     for qty in item_data['monthlyQtys']:
-                        item_row.extend([qty, None])
-                    item_row.extend([item_data['totalQtyRecap'], None, None])
+                        formatted_qty = format_qty_with_precision(qty) if qty > 0 else "-"
+                        item_row.extend([formatted_qty, None])
+                    total_recap_formatted = format_qty_with_precision(item_data['totalQtyRecap']) if item_data['totalQtyRecap'] > 0 else "-"
+                    item_row.extend([total_recap_formatted, None, None])
                     all_rows_for_sheet_content.append(item_row)
                 
                 result = {

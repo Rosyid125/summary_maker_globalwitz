@@ -128,8 +128,8 @@ class OutputFormatter:
         summary_items = [
             ("Total Records", summary.get('total_records', 0)),
             ("Total Quantity", format_qty_with_precision(summary.get('total_quantity', 0))),
-            ("Average Unit Price", f"{incoterm} {format_american_number(summary.get('avg_unit_price', 0))}" if summary.get('avg_unit_price') else "N/A"),
-            ("Total Value", f"{incoterm} {format_american_number(summary.get('total_value', 0))}"),
+            ("Average Unit Price", f"{incoterm} {format_american_number(summary.get('avg_unit_price', 0), 3)}" if summary.get('avg_unit_price') else "-"),
+            ("Total Value", f"{incoterm} {format_american_number(summary.get('total_value', 0), 3)}"),
             ("Unique Suppliers", summary.get('unique_suppliers', 0)),
             ("Unique Items", summary.get('unique_items', 0)),
             ("Unique HS Codes", summary.get('unique_hs_codes', 0))
@@ -178,8 +178,8 @@ class OutputFormatter:
                 row_data.get('gsm', ''),
                 row_data.get('add_on', ''),
                 format_american_number(row_data.get('total_quantity', 0), 0),
-                format_american_number(row_data.get('avg_unit_price', 0)) if row_data.get('avg_unit_price') else "N/A",
-                format_american_number(row_data.get('total_value', 0)),
+                format_american_number(row_data.get('avg_unit_price', 0), 3) if row_data.get('avg_unit_price') else "-",
+                format_american_number(row_data.get('total_value', 0), 3),
                 row_data.get('record_count', 0)
             ]
             
@@ -225,8 +225,8 @@ class OutputFormatter:
             values = [
                 row_data.get('supplier', ''),
                 format_qty_with_precision(row_data.get('total_quantity', 0)),
-                format_american_number(row_data.get('avg_unit_price', 0)) if row_data.get('avg_unit_price') else "N/A",
-                format_american_number(row_data.get('total_value', 0)),
+                format_american_number(row_data.get('avg_unit_price', 0), 3) if row_data.get('avg_unit_price') else "-",
+                format_american_number(row_data.get('total_value', 0), 3),
                 row_data.get('record_count', 0),
                 row_data.get('unique_items', 0)
             ]
@@ -271,11 +271,11 @@ class OutputFormatter:
             values = [
                 row_data.get('item', ''),
                 format_qty_with_precision(row_data.get('total_quantity', 0)),
-                format_american_number(row_data.get('avg_unit_price', 0)) if row_data.get('avg_unit_price') else "N/A",
-                format_american_number(row_data.get('total_value', 0)),
+                format_american_number(row_data.get('avg_unit_price', 0), 3) if row_data.get('avg_unit_price') else "-",
+                format_american_number(row_data.get('total_value', 0), 3),
                 row_data.get('record_count', 0),
                 row_data.get('unique_suppliers', 0),
-                format_american_number(row_data.get('avg_gsm', 0), 1) if row_data.get('avg_gsm') else "N/A"
+                format_american_number(row_data.get('avg_gsm', 0), 3) if row_data.get('avg_gsm') else "-"
             ]
             
             for col, value in enumerate(values, 1):
@@ -333,7 +333,7 @@ class OutputFormatter:
                     importer_name,
                     overall.get('total_records', 0),
                     format_qty_with_precision(overall.get('total_quantity', 0)),
-                    format_american_number(overall.get('total_value', 0)),
+                    format_american_number(overall.get('total_value', 0), 3),
                     overall.get('unique_suppliers', 0),
                     overall.get('unique_items', 0)
                 ]
@@ -358,7 +358,7 @@ class OutputFormatter:
                 "TOTAL",
                 total_records,
                 format_qty_with_precision(total_quantity),
-                format_american_number(total_value),
+                format_american_number(total_value, 3),
                 "",  # Can't sum unique suppliers across importers
                 ""   # Can't sum unique items across importers
             ]

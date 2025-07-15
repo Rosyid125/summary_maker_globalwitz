@@ -127,7 +127,7 @@ class OutputFormatter:
                         break
                 
                 if month_data:
-                    avg_price = format_price_with_precision(month_data['avgPrice']) if month_data['avgPrice'] else "0"
+                    avg_price = format_price_with_precision(month_data['avgPrice']) if month_data['avgPrice'] else "-"
                     qty = format_qty_with_precision(month_data['totalQty'])
                     data_row.extend([avg_price, qty])
                     monthly_totals[month_index] += month_data['totalQty'] if month_data['totalQty'] else 0
@@ -145,7 +145,7 @@ class OutputFormatter:
                     break
             
             if recap_data:
-                avg_price = format_price_with_precision(recap_data['avgOfSummaryPrice']) if recap_data['avgOfSummaryPrice'] else "0"
+                avg_price = format_price_with_precision(recap_data['avgOfSummaryPrice']) if recap_data['avgOfSummaryPrice'] else "-"
                 # Get incoterm based on mode
                 combo_incoterm = self.get_incoterm_for_combination(combo, raw_data or [], incoterm_mode, incoterm_value)
                 data_row.extend([avg_price, combo_incoterm, format_qty_with_precision(recap_data['totalOfSummaryQty'])])
@@ -422,22 +422,22 @@ class OutputFormatter:
             'align': 'center',
             'valign': 'vcenter',
             'border': 1,
-            'num_format': '#,##0.000'  # Up to 3 decimal places
+            'num_format': '#,##0.000'  # Exactly 3 decimal places
         })
         
         # Data cell format without border (for separator rows)
         formats['no_border_cell'] = workbook.add_format({
             'align': 'center',
             'valign': 'vcenter',
-            'num_format': '#,##0.00'  # American number format
+            'num_format': '#,##0.000'  # Exactly 3 decimal places
         })
         
-        # Number format for quantities (no decimal places)
+        # Number format for quantities (no decimal places for whole numbers, 3 for decimals)
         formats['qty_cell'] = workbook.add_format({
             'align': 'center',
             'valign': 'vcenter',
             'border': 1,
-            'num_format': '#,##0'  # American number format, no decimals
+            'num_format': '#,##0'  # American number format for whole numbers
         })
         
         # Bold data format
@@ -446,7 +446,7 @@ class OutputFormatter:
             'align': 'center',
             'valign': 'vcenter',
             'border': 1,
-            'num_format': '#,##0.00'  # American number format
+            'num_format': '#,##0.000'  # Exactly 3 decimal places
         })
         
         # Bold price format with controlled precision
@@ -455,7 +455,7 @@ class OutputFormatter:
             'align': 'center',
             'valign': 'vcenter',
             'border': 1,
-            'num_format': '#,##0.000'  # Up to 3 decimal places
+            'num_format': '#,##0.000'  # Exactly 3 decimal places
         })
         
         # Total all supplier formats
