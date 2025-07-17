@@ -41,6 +41,7 @@ class MainWindow:
         self.target_year = tk.StringVar(value=str(datetime.now().year))
         self.incoterm = tk.StringVar(value="-")
         self.incoterm_mode = tk.StringVar(value="manual")  # "manual" or "from_column"
+        self.supplier_as_sheet = tk.StringVar(value="tidak")  # "ya" or "tidak"
         self.output_filename = tk.StringVar()
         
         # Column mapping variables
@@ -73,6 +74,38 @@ class MainWindow:
         else:  # from_column
             self.incoterm_combo.config(state="disabled")
             self.incoterm_info_label.config(text="(Read from incoterms column - first 3 chars)")
+    
+    def update_field_descriptions(self):
+        """Update field descriptions based on supplier_as_sheet setting"""
+        self.field_descriptions = {
+            'date': 'Date/Invoice Date',
+            'hs_code': 'HS Code',
+            'item_description': 'Item Description',
+            'gsm': 'GSM (grams per square meter)',
+            'item': 'Item/Product Name',
+            'add_on': 'Add On/Additional Info',
+            'importer': 'Importer Name',
+            'supplier': 'Supplier Name',
+            'origin_country': 'Origin Country',
+            'unit_price': 'Unit Price',
+            'quantity': 'Quantity',
+            'incoterms': 'Incoterms (for auto-read mode)'
+        }
+        
+        # If supplier as sheet is enabled, descriptions stay the same
+        # The actual swapping happens during processing, not in the UI labels
+        return self.field_descriptions
+    
+    def on_supplier_as_sheet_change(self):
+        """Handle supplier as sheet option change"""
+        supplier_mode = self.supplier_as_sheet.get()
+        if supplier_mode == "ya":
+            self.log_message("Supplier sebagai sheet: YA - Supplier akan menjadi sheet, Importer menjadi kolom")
+        else:
+            self.log_message("Supplier sebagai sheet: TIDAK - Mode normal (Importer sebagai sheet, Supplier sebagai kolom)")
+        
+        # Update field descriptions
+        self.update_field_descriptions()
     
     def setup_ui(self):
         """Setup the user interface"""
@@ -218,6 +251,22 @@ class MainWindow:
         auto_btn = ttk.Button(other_section, text="Auto Generate", command=self.auto_generate_filename)
         auto_btn.grid(row=3, column=3, padx=(10, 0), pady=2)
         
+        # Supplier as sheet option
+        ttk.Label(other_section, text="Supplier sebagai Sheet:").grid(row=4, column=0, sticky='w', pady=2)
+        
+        supplier_frame = ttk.Frame(other_section)
+        supplier_frame.grid(row=4, column=1, columnspan=2, sticky='w', padx=(10, 0), pady=2)
+        
+        supplier_ya_radio = ttk.Radiobutton(supplier_frame, text="Ya", variable=self.supplier_as_sheet, value="ya", command=self.on_supplier_as_sheet_change)
+        supplier_ya_radio.pack(side='left')
+        supplier_tidak_radio = ttk.Radiobutton(supplier_frame, text="Tidak", variable=self.supplier_as_sheet, value="tidak", command=self.on_supplier_as_sheet_change)
+        supplier_tidak_radio.pack(side='left', padx=(10, 0))
+        
+        # Info label for supplier as sheet option
+        supplier_info_label = ttk.Label(other_section, text="Pilih Ya jika Anda membalikkan Supplier dan Importer", 
+                                       font=('TkDefaultFont', 8), foreground='gray')
+        supplier_info_label.grid(row=5, column=1, columnspan=2, sticky='w', padx=(10, 0), pady=2)
+        
         other_section.columnconfigure(1, weight=1)
         
         # Initialize incoterm mode UI state
@@ -252,20 +301,9 @@ class MainWindow:
         
         # Field mappings
         self.mapping_widgets = {}
-        field_descriptions = {
-            'date': 'Date/Invoice Date',
-            'hs_code': 'HS Code',
-            'item_description': 'Item Description',
-            'gsm': 'GSM (grams per square meter)',
-            'item': 'Item/Product Name',
-            'add_on': 'Add On/Additional Info',
-            'importer': 'Importer Name',
-            'supplier': 'Supplier Name',
-            'origin_country': 'Origin Country',
-            'unit_price': 'Unit Price',
-            'quantity': 'Quantity',
-            'incoterms': 'Incoterms (for auto-read mode)'
-        }
+        
+        # Update field descriptions based on supplier_as_sheet setting
+        field_descriptions = self.update_field_descriptions()
         
         for i, (field_key, description) in enumerate(field_descriptions.items()):
             ttk.Label(scrollable_frame, text=f"{description}:").grid(row=i, column=0, sticky='w', pady=2)
@@ -750,9 +788,10 @@ class MainWindow:
             period_year = self.target_year.get() or str(datetime.now().year)
             global_incoterm = self.incoterm.get() or "FOB"
             incoterm_mode = self.incoterm_mode.get()
+            supplier_as_sheet_mode = self.supplier_as_sheet.get()
             output_filename = self.output_filename.get() or "summary_output.xlsx"
             
-            self.logger.info(f"Processing with period_year='{period_year}', global_incoterm='{global_incoterm}', incoterm_mode='{incoterm_mode}', output_filename='{output_filename}'")
+            self.logger.info(f"Processing with period_year='{period_year}', global_incoterm='{global_incoterm}', incoterm_mode='{incoterm_mode}', supplier_as_sheet='{supplier_as_sheet_mode}', output_filename='{output_filename}'")
             
             self.root.after(0, lambda: self.progress_var.set(60))
             
@@ -765,7 +804,8 @@ class MainWindow:
                     period_year,
                     global_incoterm,
                     incoterm_mode,
-                    output_filename
+                    output_filename,
+                    supplier_as_sheet_mode
                 )
                 
                 if not output_path:

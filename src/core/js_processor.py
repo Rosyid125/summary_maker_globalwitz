@@ -22,7 +22,8 @@ class JSStyleProcessor:
         self.formatter = OutputFormatter(logger)
     
     def process_sheet_data(self, data_to_process: List[Dict], sheet_base_name: str, 
-                          incoterm_value: str, incoterm_mode: str = "manual") -> Optional[Dict[str, Any]]:
+                          incoterm_value: str, incoterm_mode: str = "manual", 
+                          supplier_as_sheet: str = "tidak") -> Optional[Dict[str, Any]]:
         """
         Process sheet data exactly like JavaScript processSheetData function
         
@@ -31,12 +32,13 @@ class JSStyleProcessor:
             sheet_base_name: Base name for the sheet
             incoterm_value: INCOTERM value to use (for manual mode)
             incoterm_mode: Mode for incoterm handling ("manual" or "from_column")
+            supplier_as_sheet: Whether supplier is used as sheet ("ya" or "tidak")
             
         Returns:
             Dict with sheet data or None if no data
         """
         try:
-            self.logger.info(f"Processing data for sheet based on '{sheet_base_name}' with INCOTERM: {incoterm_value}, mode: {incoterm_mode}...")
+            self.logger.info(f"Processing data for sheet based on '{sheet_base_name}' with INCOTERM: {incoterm_value}, mode: {incoterm_mode}, supplier_as_sheet: {supplier_as_sheet}...")
             
             if not data_to_process:
                 self.logger.warning("No data to process for this sheet")
@@ -51,7 +53,8 @@ class JSStyleProcessor:
                     grouped_by_supplier_or_origin[group_key] = []
                 grouped_by_supplier_or_origin[group_key].append(row)
             
-            self.logger.info(f"Grouped data into {len(grouped_by_supplier_or_origin)} supplier/origin groups")
+            group_label = "importer" if supplier_as_sheet == "ya" else "supplier"
+            self.logger.info(f"Grouped data into {len(grouped_by_supplier_or_origin)} {group_label}/origin groups")
             
             all_rows_for_sheet_content = []
             supplier_groups_meta = []
@@ -63,7 +66,7 @@ class JSStyleProcessor:
             # Process each supplier group
             group_keys = sorted(grouped_by_supplier_or_origin.keys())
             for group_index, group_name in enumerate(group_keys):
-                self.logger.info(f"  - Processing supplier/origin group: {group_name}")
+                self.logger.info(f"  - Processing {group_label}/origin group: {group_name}")
                 group_data = grouped_by_supplier_or_origin[group_name]
                 
                 # Perform aggregation
@@ -76,7 +79,7 @@ class JSStyleProcessor:
                 if summary_lvl2:
                     # Prepare group block
                     group_block = self.formatter.prepare_group_block(group_name, summary_lvl1, summary_lvl2, 
-                                                                   incoterm_value, incoterm_mode, group_data)
+                                                                   incoterm_value, incoterm_mode, group_data, supplier_as_sheet)
                     
                     all_rows_for_sheet_content.extend(group_block['groupBlockRows'])
                     
@@ -122,7 +125,9 @@ class JSStyleProcessor:
                 # Add separator
                 all_rows_for_sheet_content.append([])
                 
-                # Add "TOTAL ALL SUPPLIER" section
+                # Add "TOTAL ALL SUPPLIER/IMPORTER" section - adjust text based on mode
+                entity_name = "IMPORTER" if supplier_as_sheet == "ya" else "SUPPLIER"
+                
                 total_all_header_month_row = ["Month", None, None, None, None]
                 for month in MONTH_ORDER:
                     total_all_header_month_row.extend([month, None])
@@ -132,7 +137,7 @@ class JSStyleProcessor:
                 # Calculate grand total
                 grand_total_all_suppliers = sum(sheet_overall_monthly_totals)
                 
-                total_all_mo_row = ["TOTAL ALL SUPPLIER PER MO", None, None, None, None]
+                total_all_mo_row = [f"TOTAL ALL {entity_name} PER MO", None, None, None, None]
                 for total in sheet_overall_monthly_totals:
                     formatted_total = format_qty_with_precision(total) if total > 0 else "-"
                     total_all_mo_row.extend([formatted_total, None])
@@ -152,7 +157,7 @@ class JSStyleProcessor:
                     else:
                         quarterly_totals_all[3] += total
                 
-                total_all_quartal_row = ["TOTAL ALL SUPPLIER PER QUARTAL", None, None, None, None]
+                total_all_quartal_row = [f"TOTAL ALL {entity_name} PER QUARTAL", None, None, None, None]
                 for quarterly_total in quarterly_totals_all:
                     formatted_quarterly = format_qty_with_precision(quarterly_total) if quarterly_total > 0 else "-"
                     total_all_quartal_row.extend([formatted_quarterly, None, None, None, None, None])
@@ -202,7 +207,8 @@ class JSStyleProcessor:
 
     def process_data_like_javascript(self, all_raw_data: List[Dict], period_year: str, 
                                    global_incoterm: str, incoterm_mode: str = "manual",
-                                   output_filename: str = "summary_output.xlsx") -> str:
+                                   output_filename: str = "summary_output.xlsx",
+                                   supplier_as_sheet: str = "tidak") -> str:
         """
         Process all data like the JavaScript main function
         
@@ -212,12 +218,27 @@ class JSStyleProcessor:
             global_incoterm: Global INCOTERM value (for manual mode)
             incoterm_mode: Mode for incoterm handling ("manual" or "from_column")
             output_filename: Output filename
+            supplier_as_sheet: Whether to use supplier as sheet ("ya" or "tidak")
             
         Returns:
             str: Path to output file
         """
         try:
-            self.logger.info(f"Starting data processing with {len(all_raw_data)} rows")
+            self.logger.info(f"Starting data processing with {len(all_raw_data)} rows, supplier_as_sheet={supplier_as_sheet}")
+            
+            # If supplier_as_sheet is "ya", swap supplier and importer data
+            if supplier_as_sheet == "ya":
+                self.logger.info("Swapping supplier and importer data for 'supplier sebagai sheet' mode")
+                processed_data = []
+                for row in all_raw_data.copy():
+                    new_row = row.copy()
+                    # Swap supplier and importer
+                    new_row['importer'] = row.get('supplier', '')
+                    new_row['supplier'] = row.get('importer', '')
+                    processed_data.append(new_row)
+                all_raw_data = processed_data
+                self.logger.info("Data swapping completed")
+            
             workbook_data_for_excel_js = []
             
             # Separate data with valid importer vs blank/NA importer
@@ -236,44 +257,45 @@ class JSStyleProcessor:
             # Process data without importer
             if data_with_blank_or_na_importer:
                 self.logger.info("Processing data without importer...")
-                sheet_name_for_blank = "Data_Tanpa_Importer"
+                sheet_name_for_blank = "Data_Tanpa_Importer" if supplier_as_sheet == "tidak" else "Data_Tanpa_Supplier"
                 sheet_result = self.process_sheet_data(data_with_blank_or_na_importer, sheet_name_for_blank, 
-                                                     global_incoterm, incoterm_mode)
+                                                     global_incoterm, incoterm_mode, supplier_as_sheet)
                 if sheet_result:
                     workbook_data_for_excel_js.append(sheet_result)
                     self.logger.info("Successfully processed data without importer")
                 else:
                     self.logger.warning("Failed to process data without importer")
             
-            # Process data by importer
+            # Process data by importer (or supplier if swapped)
             if data_with_valid_importer:
                 # Get unique importers
                 unique_importers = list(set(row['importer'] for row in data_with_valid_importer if row.get('importer')))
                 unique_importers.sort()
-                self.logger.info(f"Found {len(unique_importers)} unique importers: {unique_importers}")
+                entity_label = "suppliers" if supplier_as_sheet == "ya" else "importers"
+                self.logger.info(f"Found {len(unique_importers)} unique {entity_label}: {unique_importers}")
                 
                 for importer in unique_importers:
                     importer_data = [row for row in data_with_valid_importer if row.get('importer') == importer]
                     if importer_data:
-                        self.logger.info(f"Processing importer '{importer}' with {len(importer_data)} rows...")
+                        self.logger.info(f"Processing {entity_label[:-1]} '{importer}' with {len(importer_data)} rows...")
                         # Clean sheet name (replace invalid characters)
                         base_sheet_name = importer.replace('*', '_').replace('?', '_').replace(':', '_').replace('\\', '_').replace('/', '_').replace('[', '_').replace(']', '_')
                         base_sheet_name = base_sheet_name[:30]  # Limit to 30 characters
                         
                         sheet_result = self.process_sheet_data(importer_data, base_sheet_name, 
-                                                              global_incoterm, incoterm_mode)
+                                                              global_incoterm, incoterm_mode, supplier_as_sheet)
                         if sheet_result:
                             workbook_data_for_excel_js.append(sheet_result)
-                            self.logger.info(f"Successfully processed importer '{importer}'")
+                            self.logger.info(f"Successfully processed {entity_label[:-1]} '{importer}'")
                         else:
-                            self.logger.warning(f"Failed to process importer '{importer}'")
+                            self.logger.warning(f"Failed to process {entity_label[:-1]} '{importer}'")
             
             self.logger.info(f"Total sheets processed: {len(workbook_data_for_excel_js)}")
             
             # Write output to file
             if workbook_data_for_excel_js:
                 self.logger.info("Writing output to file...")
-                output_file = self.formatter.write_output_to_file(workbook_data_for_excel_js, output_filename, period_year)
+                output_file = self.formatter.write_output_to_file(workbook_data_for_excel_js, output_filename, period_year, supplier_as_sheet)
                 if output_file and os.path.exists(output_file):
                     self.logger.info(f"Process completed successfully. Output saved to: {output_file}")
                     return output_file

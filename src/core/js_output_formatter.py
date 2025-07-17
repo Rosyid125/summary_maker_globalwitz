@@ -48,7 +48,8 @@ class OutputFormatter:
     
     def prepare_group_block(self, group_name: str, summary_lvl1_data: List[Dict], 
                           summary_lvl2_data: List[Dict], incoterm_value: str, 
-                          incoterm_mode: str = "manual", raw_data: List[Dict] = None) -> Dict[str, Any]:
+                          incoterm_mode: str = "manual", raw_data: List[Dict] = None,
+                          supplier_as_sheet: str = "tidak") -> Dict[str, Any]:
         """
         Prepare group block exactly like JavaScript prepareGroupBlock function
         
@@ -59,6 +60,7 @@ class OutputFormatter:
             incoterm_value: INCOTERM value to use (for manual mode)
             incoterm_mode: Mode for incoterm handling ("manual" or "from_column")
             raw_data: Raw data for extracting incoterms per row (for from_column mode)
+            supplier_as_sheet: Whether supplier is used as sheet ("ya" or "tidak")
             
         Returns:
             Dict with group block data
@@ -66,8 +68,12 @@ class OutputFormatter:
         group_block_rows = []
         header_row_count = 2
         
-        # Create header rows
-        header_row1 = ["SUPPLIER", "HS CODE", "ITEM", "GSM", "ADD ON"]
+        # Create header rows - adjust based on supplier_as_sheet mode
+        if supplier_as_sheet == "ya":
+            header_row1 = ["IMPORTER", "HS CODE", "ITEM", "GSM", "ADD ON"]
+        else:
+            header_row1 = ["SUPPLIER", "HS CODE", "ITEM", "GSM", "ADD ON"]
+        
         header_row2 = [None, None, None, None, None]
         
         for month in MONTH_ORDER:
@@ -205,7 +211,7 @@ class OutputFormatter:
         }
     
     def write_output_to_file(self, workbook_data: List[Dict], output_filename: str = "summary_output.xlsx", 
-                           period_year: str = None) -> str:
+                           period_year: str = None, supplier_as_sheet: str = "tidak") -> str:
         """
         Write output to Excel file with advanced formatting using xlsxwriter
         Matches the ExcelJS formatting from the original JavaScript version
@@ -214,6 +220,7 @@ class OutputFormatter:
             workbook_data: List of sheet data
             output_filename: Output filename
             period_year: Year for the period title
+            supplier_as_sheet: Whether supplier is used as sheet ("ya" or "tidak")
             
         Returns:
             str: Path to output file
@@ -466,7 +473,7 @@ class OutputFormatter:
             'num_format': '#,##0.000'  # Exactly 3 decimal places
         })
         
-        # Total all supplier formats
+        # Total all supplier/importer formats
         formats['total_all_period'] = workbook.add_format({
             'bg_color': colors['period'],
             'font_color': colors['textWhite'],
@@ -594,7 +601,7 @@ class OutputFormatter:
             if group_meta.get('hasFollowingGroup'):
                 current_row += 1
         
-        # Format "TOTAL ALL SUPPLIER" section
+        # Format "TOTAL ALL SUPPLIER/IMPORTER" section
         self._format_total_all_supplier_section(worksheet, sheet_info, formats, start_row)
         
         # Format "TOTAL PER ITEM" section
@@ -638,8 +645,8 @@ class OutputFormatter:
         worksheet.write(header_start_row + 1, col + 2, "TOTAL QTY", formats['recap'])
     
     def _format_total_all_supplier_section(self, worksheet, sheet_info, formats, start_row):
-        """Format the TOTAL ALL SUPPLIER section"""
-        # Find the total all supplier section
+        """Format the TOTAL ALL SUPPLIER/IMPORTER section"""
+        # Find the total all supplier/importer section
         total_all_rows = []
         for i, row_data in enumerate(sheet_info['allRowsForSheetContent']):
             if row_data and str(row_data[0]).strip() == "Month":
@@ -669,10 +676,11 @@ class OutputFormatter:
         worksheet.merge_range(month_header_row, recap_start_col, month_header_row, recap_start_col + 2, 
                             "RECAP", formats['recap'])
         
-        # Format total per month row
+        # Format total per month row - get the actual text from the data
         total_per_month_row = start_row + total_all_rows[1]
+        month_text = sheet_info['allRowsForSheetContent'][total_all_rows[1]][0]
         worksheet.merge_range(total_per_month_row, 0, total_per_month_row, 4, 
-                            "TOTAL ALL SUPPLIER PER MO", formats['total_all_period'])
+                            month_text, formats['total_all_period'])
         
         col = 5
         for i in range(12):
@@ -681,10 +689,11 @@ class OutputFormatter:
                                 formats['total_all_period'])
             col += 2
         
-        # Format total per quarter row
+        # Format total per quarter row - get the actual text from the data
         total_per_quarter_row = start_row + total_all_rows[2]
+        quarter_text = sheet_info['allRowsForSheetContent'][total_all_rows[2]][0]
         worksheet.merge_range(total_per_quarter_row, 0, total_per_quarter_row, 4, 
-                            "TOTAL ALL SUPPLIER PER QUARTAL", formats['total_all_period'])
+                            quarter_text, formats['total_all_period'])
         
         col = 5
         for q in range(4):
@@ -750,7 +759,7 @@ class OutputFormatter:
             
             # Check if this is a valid item row
             first_cell = str(row_data[0]).strip()
-            if (first_cell.startswith("TOTAL ALL SUPPLIER") or 
+            if (first_cell.startswith("TOTAL ALL") or 
                 first_cell.startswith("Month") or 
                 first_cell.startswith("TOTAL QTY PER MO") or 
                 first_cell.startswith("TOTAL QTY PER QUARTAL") or 
