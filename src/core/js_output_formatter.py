@@ -303,21 +303,23 @@ class OutputFormatter:
             formats = self._create_formats(workbook, colors)
             
             for i, sheet_info in enumerate(workbook_data):
-                self.logger.info(f"Processing sheet {i+1}/{len(workbook_data)}: {sheet_info['name']}")
-                worksheet = workbook.add_worksheet(sheet_info['name'])
-                
+                # Excel: max 31 chars
+                sheet_name = sheet_info['name'][:31]
+                self.logger.info(f"Processing sheet {i+1}/{len(workbook_data)}: {sheet_name}")
+                worksheet = workbook.add_worksheet(sheet_name)
+
                 # Add period title
                 if period_year:
                     period_title = f"{period_year} PERIODE"
                     worksheet.merge_range(0, 0, 0, sheet_info['totalColumns'] - 1, period_title, formats['period_title'])
                     worksheet.set_row(0, 20)
-                
+
                 # Add sheet content
                 start_row = 1 if period_year else 0
                 current_row = start_row
-                
+
                 # Apply advanced formatting (this will also write the data)
-                self.logger.info(f"Applying formatting to sheet: {sheet_info['name']}")
+                self.logger.info(f"Applying formatting to sheet: {unique_name}")
                 self._apply_advanced_formatting(worksheet, sheet_info, formats, start_row)
             
             self.logger.info("Closing workbook...")
