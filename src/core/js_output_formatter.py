@@ -302,11 +302,32 @@ class OutputFormatter:
             # Define formats
             formats = self._create_formats(workbook, colors)
             
+            # --- Sheet name uniqueness logic ---
+            used_sheetnames = {}
+            def get_unique_sheetname(raw_name):
+                # Excel: max 31 chars, case-insensitive, no duplicate
+                base = raw_name[:31]
+                idx = 1
+                candidate = base
+                base_lower = candidate.lower()
+                while base_lower in used_sheetnames:
+                    suffix = f"_{idx}"
+                    # Potong base agar total (base+suffix) <= 31
+                    maxlen = 31 - len(suffix)
+                    candidate = (raw_name[:maxlen] + suffix)
+                    candidate = candidate[:31]  # Jaga-jaga
+                    base_lower = candidate.lower()
+                    idx += 1
+                used_sheetnames[base_lower] = True
+                return candidate
+
             for i, sheet_info in enumerate(workbook_data):
-                # Excel: max 31 chars
-                sheet_name = sheet_info['name'][:31]
-                self.logger.info(f"Processing sheet {i+1}/{len(workbook_data)}: {sheet_name}")
-                worksheet = workbook.add_worksheet(sheet_name)
+                orig_name = sheet_info['name']
+                unique_name = get_unique_sheetname(orig_name)
+                if unique_name != orig_name:
+                    self.logger.warning(f"Sheet name '{orig_name}' changed to '{unique_name}' to avoid duplication.")
+                self.logger.info(f"Processing sheet {i+1}/{len(workbook_data)}: {unique_name}")
+                worksheet = workbook.add_worksheet(unique_name)
 
                 # Add period title
                 if period_year:
