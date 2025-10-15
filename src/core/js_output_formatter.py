@@ -133,8 +133,9 @@ class OutputFormatter:
                         break
                 
                 if month_data:
-                    avg_price = format_price_with_precision(month_data['avgPrice']) if month_data['avgPrice'] else "-"
-                    qty = format_qty_with_precision(month_data['totalQty'])
+                    # Store raw numeric values instead of formatted strings
+                    avg_price = month_data['avgPrice'] if month_data['avgPrice'] else "-"
+                    qty = month_data['totalQty'] if month_data['totalQty'] else "-"
                     data_row.extend([avg_price, qty])
                     monthly_totals[month_index] += month_data['totalQty'] if month_data['totalQty'] else 0
                 else:
@@ -151,10 +152,12 @@ class OutputFormatter:
                     break
             
             if recap_data:
-                avg_price = format_price_with_precision(recap_data['avgOfSummaryPrice']) if recap_data['avgOfSummaryPrice'] else "-"
+                # Store raw numeric values instead of formatted strings
+                avg_price = recap_data['avgOfSummaryPrice'] if recap_data['avgOfSummaryPrice'] else "-"
                 # Get incoterm based on mode
                 combo_incoterm = self.get_incoterm_for_combination(combo, raw_data or [], incoterm_mode, incoterm_value)
-                data_row.extend([avg_price, combo_incoterm, format_qty_with_precision(recap_data['totalOfSummaryQty'])])
+                total_qty = recap_data['totalOfSummaryQty'] if recap_data['totalOfSummaryQty'] else "-"
+                data_row.extend([avg_price, combo_incoterm, total_qty])
             else:
                 data_row.extend(["-", "-", "-"])
             
@@ -167,10 +170,10 @@ class OutputFormatter:
             # Add total qty per month row
             total_qty_per_mo_row = ["TOTAL QTY PER MO", "-", "-", "-", "-"]
             for total in monthly_totals:
-                # If total is 0 or None, show "-" instead of empty cell
-                display_total = format_qty_with_precision(total) if (isinstance(total, (int, float)) and total > 0) else "-"
+                # Store raw numeric values instead of formatted strings
+                display_total = total if (isinstance(total, (int, float)) and total > 0) else "-"
                 total_qty_per_mo_row.extend([display_total, "-"])
-            total_qty_per_mo_row.extend([format_qty_with_precision(overall_total_qty), "-", "-"])
+            total_qty_per_mo_row.extend([overall_total_qty if overall_total_qty > 0 else "-", "-", "-"])
             group_block_rows.append(total_qty_per_mo_row)
             
             # Add quarterly totals
@@ -187,17 +190,17 @@ class OutputFormatter:
                     quarterly_totals[3] += num_total
             
             total_qty_per_quartal_row = ["TOTAL QTY PER QUARTAL", "-", "-", "-", "-"]
-            # Q1 (Jan-Mar)
-            q1_display = format_qty_with_precision(quarterly_totals[0]) if quarterly_totals[0] > 0 else "-"
+            # Q1 (Jan-Mar) - store raw numeric values
+            q1_display = quarterly_totals[0] if quarterly_totals[0] > 0 else "-"
             total_qty_per_quartal_row.extend([q1_display, "-", "-", "-", "-", "-"])
             # Q2 (Apr-Jun)  
-            q2_display = format_qty_with_precision(quarterly_totals[1]) if quarterly_totals[1] > 0 else "-"
+            q2_display = quarterly_totals[1] if quarterly_totals[1] > 0 else "-"
             total_qty_per_quartal_row.extend([q2_display, "-", "-", "-", "-", "-"])
             # Q3 (Jul-Sep)
-            q3_display = format_qty_with_precision(quarterly_totals[2]) if quarterly_totals[2] > 0 else "-"
+            q3_display = quarterly_totals[2] if quarterly_totals[2] > 0 else "-"
             total_qty_per_quartal_row.extend([q3_display, "-", "-", "-", "-", "-"])
             # Q4 (Oct-Dec)
-            q4_display = format_qty_with_precision(quarterly_totals[3]) if quarterly_totals[3] > 0 else "-"
+            q4_display = quarterly_totals[3] if quarterly_totals[3] > 0 else "-"
             total_qty_per_quartal_row.extend([q4_display, "-", "-", "-", "-", "-"])
             total_qty_per_quartal_row.extend(["-", "-", "-"])
             group_block_rows.append(total_qty_per_quartal_row)
@@ -503,7 +506,8 @@ class OutputFormatter:
             'bold': True,
             'align': 'center',
             'valign': 'vcenter',
-            'border': 1
+            'border': 1,
+            'num_format': '#,##0.000'  # Format with comma separator
         })
         
         return formats
@@ -527,27 +531,24 @@ class OutputFormatter:
         for row_idx in range(total_rows):
             actual_row = start_row + row_idx
             row_data = sheet_info['allRowsForSheetContent'][row_idx]
-            
             if row_idx in rows_with_content:
-                # Apply format with borders for content rows
                 for col_idx in range(total_cols):
                     cell_value = row_data[col_idx] if col_idx < len(row_data) else ""
-                    
-                    # Use text format for GSM column (column 3, zero-indexed)
                     if col_idx == 3:  # GSM column
                         worksheet.write(actual_row, col_idx, cell_value, formats['text_cell'])
+                    elif isinstance(cell_value, (int, float)):
+                        worksheet.write_number(actual_row, col_idx, cell_value, formats['data_cell'])
+                    elif cell_value is None or cell_value == "":
+                        worksheet.write_blank(actual_row, col_idx, "", formats['data_cell'])
                     else:
                         worksheet.write(actual_row, col_idx, cell_value, formats['data_cell'])
             else:
-                # Apply format without borders for separator rows
+                # Separator rows - no borders at all
                 for col_idx in range(total_cols):
                     cell_value = row_data[col_idx] if col_idx < len(row_data) else ""
-                    
-                    # Use text format for GSM column (column 3, zero-indexed)
-                    if col_idx == 3:  # GSM column
-                        worksheet.write(actual_row, col_idx, cell_value, formats['text_cell'])
-                    else:
-                        worksheet.write(actual_row, col_idx, cell_value, formats['no_border_cell'])
+                    # Don't write anything to separator rows, just leave them blank
+                    # This ensures no borders appear
+                    pass
         
         # Format supplier group headers
         current_row = start_row
@@ -733,13 +734,22 @@ class OutputFormatter:
                                     first_cell, formats['total_all_period'])
                 col = 5
                 for i in range(12):
-                    worksheet.merge_range(current_item_row, col, current_item_row, col + 1, 
-                                        row_data[col] if col < len(row_data) else "", 
-                                        formats['total_all_period'])
+                    value = row_data[col] if col < len(row_data) else "-"
+                    # Write numeric values as numbers with proper formatting
+                    if isinstance(value, (int, float)):
+                        worksheet.merge_range(current_item_row, col, current_item_row, col + 1, 
+                                            value, formats['total_all_period'])
+                    else:
+                        worksheet.merge_range(current_item_row, col, current_item_row, col + 1, 
+                                            value, formats['total_all_period'])
                     col += 2
-                worksheet.merge_range(current_item_row, recap_start_col, current_item_row, recap_start_col + 2, 
-                                    row_data[recap_start_col] if recap_start_col < len(row_data) else "", 
-                                    formats['total_all_period'])
+                recap_value = row_data[recap_start_col] if recap_start_col < len(row_data) else "-"
+                if isinstance(recap_value, (int, float)):
+                    worksheet.merge_range(current_item_row, recap_start_col, current_item_row, recap_start_col + 2, 
+                                        recap_value, formats['total_all_period'])
+                else:
+                    worksheet.merge_range(current_item_row, recap_start_col, current_item_row, recap_start_col + 2, 
+                                        recap_value, formats['total_all_period'])
                 current_item_row += 1
                 continue
             
@@ -749,32 +759,40 @@ class OutputFormatter:
                                     first_cell, formats['total_all_period'])
                 col = 5
                 for q in range(4):
-                    worksheet.merge_range(current_item_row, col, current_item_row, col + 5, 
-                                        row_data[col] if col < len(row_data) else "", 
-                                        formats['total_all_period'])
+                    value = row_data[col] if col < len(row_data) else "-"
+                    # Write numeric values as numbers with proper formatting
+                    if isinstance(value, (int, float)):
+                        worksheet.merge_range(current_item_row, col, current_item_row, col + 5, 
+                                            value, formats['total_all_period'])
+                    else:
+                        worksheet.merge_range(current_item_row, col, current_item_row, col + 5, 
+                                            value, formats['total_all_period'])
                     col += 6
-                worksheet.merge_range(current_item_row, recap_start_col, current_item_row, recap_start_col + 2, 
-                                    row_data[recap_start_col] if recap_start_col < len(row_data) else "", 
-                                    formats['total_all_period'])
+                recap_value = row_data[recap_start_col] if recap_start_col < len(row_data) else "-"
+                if isinstance(recap_value, (int, float)):
+                    worksheet.merge_range(current_item_row, recap_start_col, current_item_row, recap_start_col + 2, 
+                                        recap_value, formats['total_all_period'])
+                else:
+                    worksheet.merge_range(current_item_row, recap_start_col, current_item_row, recap_start_col + 2, 
+                                        recap_value, formats['total_all_period'])
                 current_item_row += 1
                 continue
             
             # Regular item rows
             # Merge item columns
             worksheet.merge_range(current_item_row, 0, current_item_row, 4, first_cell, formats['data_cell'])
-            
             # Merge monthly columns
             col = 5
             for i in range(12):
-                worksheet.merge_range(current_item_row, col, current_item_row, col + 1, 
-                                    row_data[col] if col < len(row_data) else "", formats['data_cell'])
+                value = row_data[col] if col < len(row_data) else ""
+                if isinstance(value, (int, float)):
+                    worksheet.merge_range(current_item_row, col, current_item_row, col + 1, value, formats['data_cell'])
+                else:
+                    worksheet.merge_range(current_item_row, col, current_item_row, col + 1, value, formats['data_cell'])
                 col += 2
-            
             # Merge recap columns
-            worksheet.merge_range(current_item_row, recap_start_col, current_item_row, recap_start_col + 2, 
-                                row_data[recap_start_col] if recap_start_col < len(row_data) else "", 
-                                formats['data_cell'])
-            
+            recap_value = row_data[recap_start_col] if recap_start_col < len(row_data) else ""
+            worksheet.merge_range(current_item_row, recap_start_col, current_item_row, recap_start_col + 2, recap_value, formats['data_cell'])
             current_item_row += 1
     
     def extract_incoterm_from_value(self, incoterm_value: str) -> str:

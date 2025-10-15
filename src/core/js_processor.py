@@ -138,12 +138,14 @@ class JSStyleProcessor:
                 # Add item rows
                 for item_key in sorted(item_summary_data_for_sheet.keys()):
                     item_data = item_summary_data_for_sheet[item_key]
-                    item_row = [f"{item_data['item']} {item_data['gsm']} {item_data['addOn']}", None, None, None, None]
+                    item_row = [f"{item_data['item']} {item_data['gsm']} {item_data['addOn']}", "-", "-", "-", "-"]
                     for qty in item_data['monthlyQtys']:
-                        formatted_qty = format_qty_with_precision(qty) if qty > 0 else "-"
-                        item_row.extend([formatted_qty, None])
-                    total_recap_formatted = format_qty_with_precision(item_data['totalQtyRecap']) if item_data['totalQtyRecap'] > 0 else "-"
-                    item_row.extend([total_recap_formatted, None, None])
+                        # Store raw numeric values instead of formatted strings - use "-" for empty cells
+                        numeric_qty = qty if qty > 0 else "-"
+                        item_row.extend([numeric_qty, "-"])
+                    # Store raw numeric values instead of formatted strings - use "-" for empty cells
+                    total_recap = item_data['totalQtyRecap'] if item_data['totalQtyRecap'] > 0 else "-"
+                    item_row.extend([total_recap, "-", "-"])
                     all_rows_for_sheet_content.append(item_row)
                 
                 # Add "TOTAL ALL SUPPLIER/IMPORTER" section at the bottom - adjust text based on mode
@@ -152,12 +154,14 @@ class JSStyleProcessor:
                 # Calculate grand total
                 grand_total_all_suppliers = sum(sheet_overall_monthly_totals)
                 
-                total_all_mo_row = [f"TOTAL ALL {entity_name} PER MO", None, None, None, None]
+                total_all_mo_row = [f"TOTAL ALL {entity_name} PER MO", "-", "-", "-", "-"]
                 for total in sheet_overall_monthly_totals:
-                    formatted_total = format_qty_with_precision(total) if total > 0 else "-"
-                    total_all_mo_row.extend([formatted_total, None])
-                grand_total_formatted = format_qty_with_precision(grand_total_all_suppliers) if grand_total_all_suppliers > 0 else "-"
-                total_all_mo_row.extend([grand_total_formatted, None, None])
+                    # Store raw numeric values instead of formatted strings
+                    numeric_total = total if total > 0 else "-"
+                    total_all_mo_row.extend([numeric_total, "-"])
+                # Store raw numeric values instead of formatted strings
+                grand_total_numeric = grand_total_all_suppliers if grand_total_all_suppliers > 0 else "-"
+                total_all_mo_row.extend([grand_total_numeric, "-", "-"])
                 all_rows_for_sheet_content.append(total_all_mo_row)
                 
                 # Calculate quarterly totals
@@ -172,11 +176,12 @@ class JSStyleProcessor:
                     else:
                         quarterly_totals_all[3] += total
                 
-                total_all_quartal_row = [f"TOTAL ALL {entity_name} PER QUARTAL", None, None, None, None]
+                total_all_quartal_row = [f"TOTAL ALL {entity_name} PER QUARTAL", "-", "-", "-", "-"]
                 for quarterly_total in quarterly_totals_all:
-                    formatted_quarterly = format_qty_with_precision(quarterly_total) if quarterly_total > 0 else "-"
-                    total_all_quartal_row.extend([formatted_quarterly, None, None, None, None, None])
-                total_all_quartal_row.extend([None, None, None])
+                    # Store raw numeric values instead of formatted strings
+                    numeric_quarterly = quarterly_total if quarterly_total > 0 else "-"
+                    total_all_quartal_row.extend([numeric_quarterly, "-", "-", "-", "-", "-"])
+                total_all_quartal_row.extend(["-", "-", "-"])
                 all_rows_for_sheet_content.append(total_all_quartal_row)
                 
                 result = {

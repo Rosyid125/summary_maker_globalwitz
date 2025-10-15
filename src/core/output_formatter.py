@@ -4,7 +4,7 @@ Output Formatter Module - Handles Excel output generation with formatting
 
 import pandas as pd
 from openpyxl import Workbook
-from openpyxl.styles import Font, Border, Side, Alignment, PatternFill
+from openpyxl.styles import Font, Border, Side, Alignment, PatternFill, numbers
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.utils import get_column_letter
 import os
@@ -36,6 +36,63 @@ class OutputFormatter:
             bottom=Side(style='thin')
         )
         self.center_alignment = Alignment(horizontal='center', vertical='center')
+        
+        # Number format strings for Excel
+        self.number_format_integer = '#,##0'  # For integers with comma separator
+        self.number_format_decimal = '#,##0.000'  # For decimals with 3 decimal places
+    
+    def _write_numeric_cell(self, ws, row: int, col: int, value, decimals: int = 3, 
+                           apply_border: bool = True, apply_fill=None):
+        """
+        Write a numeric value to cell with proper Excel number format
+        
+        Args:
+            ws: Worksheet
+            row: Row number
+            col: Column number
+            value: Numeric value (will be written as number, not string)
+            decimals: Number of decimal places (0 for integer, 3 for decimal)
+            apply_border: Whether to apply border
+            apply_fill: Fill pattern to apply
+        """
+        cell = ws.cell(row=row, column=col)
+        
+        # Handle None or empty values
+        if value is None or (isinstance(value, str) and value in ["-", ""]):
+            cell.value = None
+            if apply_border:
+                cell.border = self.border_thin
+            cell.alignment = Alignment(horizontal='right')
+            return cell
+        
+        try:
+            # Convert to float/int
+            numeric_value = float(value)
+            
+            # Write numeric value (not string)
+            cell.value = numeric_value
+            
+            # Set number format
+            if decimals == 0 or numeric_value == int(numeric_value):
+                cell.number_format = self.number_format_integer
+            else:
+                cell.number_format = self.number_format_decimal
+            
+            # Apply styling
+            if apply_border:
+                cell.border = self.border_thin
+            if apply_fill:
+                cell.fill = apply_fill
+            
+            cell.alignment = Alignment(horizontal='right')
+            
+        except (ValueError, TypeError):
+            # If conversion fails, write as is
+            cell.value = value
+            if apply_border:
+                cell.border = self.border_thin
+        
+        return cell
     
     def create_output_file(self, aggregated_data: Dict[str, Any], output_path: str, 
                           incoterm: str = "FOB", year: int = None) -> bool:
@@ -124,22 +181,38 @@ class OutputFormatter:
         ws.cell(row=current_row, column=1).font = self.header_font
         current_row += 1
         
-        # Summary data
-        summary_items = [
-            ("Total Records", summary.get('total_records', 0)),
-            ("Total Quantity", format_qty_with_precision(summary.get('total_quantity', 0))),
-            ("Average Unit Price", f"{incoterm} {format_american_number(summary.get('avg_unit_price', 0), 3)}" if summary.get('avg_unit_price') else "-"),
-            ("Total Value", f"{incoterm} {format_american_number(summary.get('total_value', 0), 3)}"),
-            ("Unique Suppliers", summary.get('unique_suppliers', 0)),
-            ("Unique Items", summary.get('unique_items', 0)),
-            ("Unique HS Codes", summary.get('unique_hs_codes', 0))
-        ]
+        # Summary data with raw numeric values
+        ws.cell(row=current_row, column=1, value="Total Records").font = Font(bold=True)
+        ws.cell(row=current_row, column=2, value=summary.get('total_records', 0))
+        current_row += 1
         
-        for label, value in summary_items:
-            ws.cell(row=current_row, column=1, value=label)
-            ws.cell(row=current_row, column=2, value=value)
-            ws.cell(row=current_row, column=1).font = Font(bold=True)
-            current_row += 1
+        ws.cell(row=current_row, column=1, value="Total Quantity").font = Font(bold=True)
+        self._write_numeric_cell(ws, current_row, 2, summary.get('total_quantity', 0), decimals=3, apply_border=False)
+        current_row += 1
+        
+        ws.cell(row=current_row, column=1, value=f"Average Unit Price ({incoterm})").font = Font(bold=True)
+        avg_price = summary.get('avg_unit_price', 0)
+        if avg_price:
+            self._write_numeric_cell(ws, current_row, 2, avg_price, decimals=3, apply_border=False)
+        else:
+            ws.cell(row=current_row, column=2, value="-")
+        current_row += 1
+        
+        ws.cell(row=current_row, column=1, value=f"Total Value ({incoterm})").font = Font(bold=True)
+        self._write_numeric_cell(ws, current_row, 2, summary.get('total_value', 0), decimals=3, apply_border=False)
+        current_row += 1
+        
+        ws.cell(row=current_row, column=1, value="Unique Suppliers").font = Font(bold=True)
+        ws.cell(row=current_row, column=2, value=summary.get('unique_suppliers', 0))
+        current_row += 1
+        
+        ws.cell(row=current_row, column=1, value="Unique Items").font = Font(bold=True)
+        ws.cell(row=current_row, column=2, value=summary.get('unique_items', 0))
+        current_row += 1
+        
+        ws.cell(row=current_row, column=1, value="Unique HS Codes").font = Font(bold=True)
+        ws.cell(row=current_row, column=2, value=summary.get('unique_hs_codes', 0))
+        current_row += 1
         
         return current_row
     
@@ -171,27 +244,32 @@ class OutputFormatter:
             quarter = self._get_quarter_from_month_year(row_data.get('month_year', ''))
             quarter_fill = self.quarter_colors.get(quarter, None)
             
-            values = [
-                row_data.get('month_name', ''),
-                row_data.get('hs_code', ''),
-                row_data.get('item', ''),
-                row_data.get('gsm', ''),
-                row_data.get('add_on', ''),
-                format_american_number(row_data.get('total_quantity', 0), 0),
-                format_american_number(row_data.get('avg_unit_price', 0), 3) if row_data.get('avg_unit_price') else "-",
-                format_american_number(row_data.get('total_value', 0), 3),
-                row_data.get('record_count', 0)
-            ]
+            # Text columns
+            ws.cell(row=current_row, column=1, value=row_data.get('month_name', '')).border = self.border_thin
+            ws.cell(row=current_row, column=2, value=row_data.get('hs_code', '')).border = self.border_thin
+            ws.cell(row=current_row, column=3, value=row_data.get('item', '')).border = self.border_thin
+            ws.cell(row=current_row, column=4, value=row_data.get('gsm', '')).border = self.border_thin
+            ws.cell(row=current_row, column=5, value=row_data.get('add_on', '')).border = self.border_thin
             
-            for col, value in enumerate(values, 1):
-                cell = ws.cell(row=current_row, column=col, value=value)
+            # Numeric columns with proper formatting
+            self._write_numeric_cell(ws, current_row, 6, row_data.get('total_quantity', 0), decimals=3, apply_fill=quarter_fill)
+            
+            avg_price = row_data.get('avg_unit_price', 0)
+            if avg_price:
+                self._write_numeric_cell(ws, current_row, 7, avg_price, decimals=3, apply_fill=quarter_fill)
+            else:
+                cell = ws.cell(row=current_row, column=7, value=None)
                 cell.border = self.border_thin
                 if quarter_fill:
                     cell.fill = quarter_fill
-                
-                # Right align numbers
-                if col >= 6:  # Numeric columns
-                    cell.alignment = Alignment(horizontal='right')
+            
+            self._write_numeric_cell(ws, current_row, 8, row_data.get('total_value', 0), decimals=3, apply_fill=quarter_fill)
+            
+            cell = ws.cell(row=current_row, column=9, value=row_data.get('record_count', 0))
+            cell.border = self.border_thin
+            cell.alignment = Alignment(horizontal='right')
+            if quarter_fill:
+                cell.fill = quarter_fill
             
             current_row += 1
         
@@ -222,22 +300,28 @@ class OutputFormatter:
         
         # Data rows
         for row_data in supplier_data:
-            values = [
-                row_data.get('supplier', ''),
-                format_qty_with_precision(row_data.get('total_quantity', 0)),
-                format_american_number(row_data.get('avg_unit_price', 0), 3) if row_data.get('avg_unit_price') else "-",
-                format_american_number(row_data.get('total_value', 0), 3),
-                row_data.get('record_count', 0),
-                row_data.get('unique_items', 0)
-            ]
+            # Text column
+            ws.cell(row=current_row, column=1, value=row_data.get('supplier', '')).border = self.border_thin
             
-            for col, value in enumerate(values, 1):
-                cell = ws.cell(row=current_row, column=col, value=value)
+            # Numeric columns with proper formatting
+            self._write_numeric_cell(ws, current_row, 2, row_data.get('total_quantity', 0), decimals=3)
+            
+            avg_price = row_data.get('avg_unit_price', 0)
+            if avg_price:
+                self._write_numeric_cell(ws, current_row, 3, avg_price, decimals=3)
+            else:
+                cell = ws.cell(row=current_row, column=3, value=None)
                 cell.border = self.border_thin
-                
-                # Right align numbers
-                if col >= 2:  # Numeric columns
-                    cell.alignment = Alignment(horizontal='right')
+            
+            self._write_numeric_cell(ws, current_row, 4, row_data.get('total_value', 0), decimals=3)
+            
+            cell = ws.cell(row=current_row, column=5, value=row_data.get('record_count', 0))
+            cell.border = self.border_thin
+            cell.alignment = Alignment(horizontal='right')
+            
+            cell = ws.cell(row=current_row, column=6, value=row_data.get('unique_items', 0))
+            cell.border = self.border_thin
+            cell.alignment = Alignment(horizontal='right')
             
             current_row += 1
         
@@ -268,23 +352,35 @@ class OutputFormatter:
         
         # Data rows
         for row_data in item_data:
-            values = [
-                row_data.get('item', ''),
-                format_qty_with_precision(row_data.get('total_quantity', 0)),
-                format_american_number(row_data.get('avg_unit_price', 0), 3) if row_data.get('avg_unit_price') else "-",
-                format_american_number(row_data.get('total_value', 0), 3),
-                row_data.get('record_count', 0),
-                row_data.get('unique_suppliers', 0),
-                format_american_number(row_data.get('avg_gsm', 0), 3) if row_data.get('avg_gsm') else "-"
-            ]
+            # Text column
+            ws.cell(row=current_row, column=1, value=row_data.get('item', '')).border = self.border_thin
             
-            for col, value in enumerate(values, 1):
-                cell = ws.cell(row=current_row, column=col, value=value)
+            # Numeric columns with proper formatting
+            self._write_numeric_cell(ws, current_row, 2, row_data.get('total_quantity', 0), decimals=3)
+            
+            avg_price = row_data.get('avg_unit_price', 0)
+            if avg_price:
+                self._write_numeric_cell(ws, current_row, 3, avg_price, decimals=3)
+            else:
+                cell = ws.cell(row=current_row, column=3, value=None)
                 cell.border = self.border_thin
-                
-                # Right align numbers
-                if col >= 2:  # Numeric columns
-                    cell.alignment = Alignment(horizontal='right')
+            
+            self._write_numeric_cell(ws, current_row, 4, row_data.get('total_value', 0), decimals=3)
+            
+            cell = ws.cell(row=current_row, column=5, value=row_data.get('record_count', 0))
+            cell.border = self.border_thin
+            cell.alignment = Alignment(horizontal='right')
+            
+            cell = ws.cell(row=current_row, column=6, value=row_data.get('unique_suppliers', 0))
+            cell.border = self.border_thin
+            cell.alignment = Alignment(horizontal='right')
+            
+            avg_gsm = row_data.get('avg_gsm', 0)
+            if avg_gsm:
+                self._write_numeric_cell(ws, current_row, 7, avg_gsm, decimals=3)
+            else:
+                cell = ws.cell(row=current_row, column=7, value=None)
+                cell.border = self.border_thin
             
             current_row += 1
         
@@ -329,48 +425,59 @@ class OutputFormatter:
             for importer_name, importer_data in aggregated_data.items():
                 overall = importer_data.get('overall_summary', {})
                 
-                values = [
-                    importer_name,
-                    overall.get('total_records', 0),
-                    format_qty_with_precision(overall.get('total_quantity', 0)),
-                    format_american_number(overall.get('total_value', 0), 3),
-                    overall.get('unique_suppliers', 0),
-                    overall.get('unique_items', 0)
-                ]
-                
                 # Update totals
                 total_records += overall.get('total_records', 0)
                 total_quantity += overall.get('total_quantity', 0)
                 total_value += overall.get('total_value', 0)
                 
-                for col, value in enumerate(values, 1):
-                    cell = ws.cell(row=current_row, column=col, value=value)
-                    cell.border = self.border_thin
-                    
-                    # Right align numbers
-                    if col >= 2:
-                        cell.alignment = Alignment(horizontal='right')
+                # Text column
+                ws.cell(row=current_row, column=1, value=importer_name).border = self.border_thin
+                
+                # Numeric columns with proper formatting
+                cell = ws.cell(row=current_row, column=2, value=overall.get('total_records', 0))
+                cell.border = self.border_thin
+                cell.alignment = Alignment(horizontal='right')
+                
+                self._write_numeric_cell(ws, current_row, 3, overall.get('total_quantity', 0), decimals=3)
+                self._write_numeric_cell(ws, current_row, 4, overall.get('total_value', 0), decimals=3)
+                
+                cell = ws.cell(row=current_row, column=5, value=overall.get('unique_suppliers', 0))
+                cell.border = self.border_thin
+                cell.alignment = Alignment(horizontal='right')
+                
+                cell = ws.cell(row=current_row, column=6, value=overall.get('unique_items', 0))
+                cell.border = self.border_thin
+                cell.alignment = Alignment(horizontal='right')
                 
                 current_row += 1
             
             # Total row
-            total_values = [
-                "TOTAL",
-                total_records,
-                format_qty_with_precision(total_quantity),
-                format_american_number(total_value, 3),
-                "",  # Can't sum unique suppliers across importers
-                ""   # Can't sum unique items across importers
-            ]
+            total_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
             
-            for col, value in enumerate(total_values, 1):
-                cell = ws.cell(row=current_row, column=col, value=value)
+            cell = ws.cell(row=current_row, column=1, value="TOTAL")
+            cell.font = Font(bold=True)
+            cell.border = self.border_thin
+            cell.fill = total_fill
+            
+            cell = ws.cell(row=current_row, column=2, value=total_records)
+            cell.font = Font(bold=True)
+            cell.border = self.border_thin
+            cell.fill = total_fill
+            cell.alignment = Alignment(horizontal='right')
+            
+            cell = self._write_numeric_cell(ws, current_row, 3, total_quantity, decimals=3, apply_fill=total_fill)
+            cell.font = Font(bold=True)
+            
+            cell = self._write_numeric_cell(ws, current_row, 4, total_value, decimals=3, apply_fill=total_fill)
+            cell.font = Font(bold=True)
+            
+            # Can't sum unique suppliers/items across importers
+            for col in [5, 6]:
+                cell = ws.cell(row=current_row, column=col, value="")
                 cell.font = Font(bold=True)
                 cell.border = self.border_thin
-                cell.fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
-                
-                if col >= 2:
-                    cell.alignment = Alignment(horizontal='right')
+                cell.fill = total_fill
+                cell.alignment = Alignment(horizontal='right')
             
             # Auto-adjust column widths
             self._auto_adjust_columns(ws)
