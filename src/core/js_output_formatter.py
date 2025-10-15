@@ -668,70 +668,14 @@ class OutputFormatter:
         worksheet.write(header_start_row + 1, col + 2, "TOTAL QTY", formats['recap'])
     
     def _format_total_all_supplier_section(self, worksheet, sheet_info, formats, start_row):
-        """Format the TOTAL ALL SUPPLIER/IMPORTER section"""
-        # Find the total all supplier/importer section
-        total_all_rows = []
-        for i, row_data in enumerate(sheet_info['allRowsForSheetContent']):
-            if row_data and str(row_data[0]).strip() == "Month":
-                total_all_rows = [i, i + 1, i + 2]  # Month header, Total per month, Total per quarter
-                break
-        
-        if not total_all_rows:
-            return
-        
-        # Format Month header row
-        month_header_row = start_row + total_all_rows[0]
-        worksheet.merge_range(month_header_row, 0, month_header_row, 4, "Month", formats['supplier_cols'])
-        
-        # Format monthly columns with quarterly colors
-        col = 5
-        quarter_formats = ['q1', 'q2', 'q3', 'q4']
-        
-        for q in range(4):
-            q_format = formats[quarter_formats[q]]
-            for i in range(3):
-                worksheet.merge_range(month_header_row, col, month_header_row, col + 1, 
-                                    sheet_info['allRowsForSheetContent'][total_all_rows[0]][col], q_format)
-                col += 2
-        
-        # Format recap
-        recap_start_col = 5 + 12 * 2
-        worksheet.merge_range(month_header_row, recap_start_col, month_header_row, recap_start_col + 2, 
-                            "RECAP", formats['recap'])
-        
-        # Format total per month row - get the actual text from the data
-        total_per_month_row = start_row + total_all_rows[1]
-        month_text = sheet_info['allRowsForSheetContent'][total_all_rows[1]][0]
-        worksheet.merge_range(total_per_month_row, 0, total_per_month_row, 4, 
-                            month_text, formats['total_all_period'])
-        
-        col = 5
-        for i in range(12):
-            worksheet.merge_range(total_per_month_row, col, total_per_month_row, col + 1, 
-                                sheet_info['allRowsForSheetContent'][total_all_rows[1]][col], 
-                                formats['total_all_period'])
-            col += 2
-        
-        # Format total per quarter row - get the actual text from the data
-        total_per_quarter_row = start_row + total_all_rows[2]
-        quarter_text = sheet_info['allRowsForSheetContent'][total_all_rows[2]][0]
-        worksheet.merge_range(total_per_quarter_row, 0, total_per_quarter_row, 4, 
-                            quarter_text, formats['total_all_period'])
-        
-        col = 5
-        for q in range(4):
-            worksheet.merge_range(total_per_quarter_row, col, total_per_quarter_row, col + 5, 
-                                sheet_info['allRowsForSheetContent'][total_all_rows[2]][col], 
-                                formats['total_all_period'])
-            col += 6
-        
-        # Merge recap cell
-        worksheet.merge_range(total_per_month_row, recap_start_col, total_per_quarter_row, recap_start_col + 2, 
-                            sheet_info['allRowsForSheetContent'][total_all_rows[1]][recap_start_col], 
-                            formats['total_all_period'])
+        """Format the TOTAL ALL SUPPLIER/IMPORTER section (legacy - now integrated in TOTAL PER ITEM)"""
+        # This section is now part of TOTAL PER ITEM table
+        # Keep this function for backwards compatibility but it will do nothing
+        # since the TOTAL ALL SUPPLIER rows are now at the bottom of TOTAL PER ITEM
+        return
     
     def _format_total_per_item_section(self, worksheet, sheet_info, formats, start_row):
-        """Format the TOTAL PER ITEM section"""
+        """Format the TOTAL PER ITEM section (now includes TOTAL ALL SUPPLIER at bottom)"""
         # Find the total per item section
         total_per_item_start = -1
         total_per_item_header = -1
@@ -773,22 +717,49 @@ class OutputFormatter:
         worksheet.merge_range(header_row, recap_start_col, header_row, recap_start_col + 2, 
                             "RECAP", formats['recap'])
         
-        # Format item rows
+        # Format item rows and TOTAL ALL SUPPLIER rows
         current_item_row = header_row + 1
         while current_item_row < start_row + len(sheet_info['allRowsForSheetContent']):
             row_data = sheet_info['allRowsForSheetContent'][current_item_row - start_row]
             if not row_data or not str(row_data[0]).strip():
                 break
             
-            # Check if this is a valid item row
+            # Check if this is a TOTAL ALL SUPPLIER row
             first_cell = str(row_data[0]).strip()
-            if (first_cell.startswith("TOTAL ALL") or 
-                first_cell.startswith("Month") or 
-                first_cell.startswith("TOTAL QTY PER MO") or 
-                first_cell.startswith("TOTAL QTY PER QUARTAL") or 
-                first_cell.startswith("TOTAL PER ITEM")):
-                break
             
+            # Format TOTAL ALL SUPPLIER PER MO row
+            if first_cell.startswith("TOTAL ALL") and "PER MO" in first_cell:
+                worksheet.merge_range(current_item_row, 0, current_item_row, 4, 
+                                    first_cell, formats['total_all_period'])
+                col = 5
+                for i in range(12):
+                    worksheet.merge_range(current_item_row, col, current_item_row, col + 1, 
+                                        row_data[col] if col < len(row_data) else "", 
+                                        formats['total_all_period'])
+                    col += 2
+                worksheet.merge_range(current_item_row, recap_start_col, current_item_row, recap_start_col + 2, 
+                                    row_data[recap_start_col] if recap_start_col < len(row_data) else "", 
+                                    formats['total_all_period'])
+                current_item_row += 1
+                continue
+            
+            # Format TOTAL ALL SUPPLIER PER QUARTAL row
+            if first_cell.startswith("TOTAL ALL") and "PER QUARTAL" in first_cell:
+                worksheet.merge_range(current_item_row, 0, current_item_row, 4, 
+                                    first_cell, formats['total_all_period'])
+                col = 5
+                for q in range(4):
+                    worksheet.merge_range(current_item_row, col, current_item_row, col + 5, 
+                                        row_data[col] if col < len(row_data) else "", 
+                                        formats['total_all_period'])
+                    col += 6
+                worksheet.merge_range(current_item_row, recap_start_col, current_item_row, recap_start_col + 2, 
+                                    row_data[recap_start_col] if recap_start_col < len(row_data) else "", 
+                                    formats['total_all_period'])
+                current_item_row += 1
+                continue
+            
+            # Regular item rows
             # Merge item columns
             worksheet.merge_range(current_item_row, 0, current_item_row, 4, first_cell, formats['data_cell'])
             

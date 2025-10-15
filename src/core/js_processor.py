@@ -125,14 +125,29 @@ class JSStyleProcessor:
                 # Add separator
                 all_rows_for_sheet_content.append([])
                 
-                # Add "TOTAL ALL SUPPLIER/IMPORTER" section - adjust text based on mode
-                entity_name = "IMPORTER" if supplier_as_sheet == "ya" else "SUPPLIER"
+                # Add "TOTAL PER ITEM" section
+                item_table_main_title_row = ["TOTAL PER ITEM"]
+                all_rows_for_sheet_content.append(item_table_main_title_row)
                 
-                total_all_header_month_row = ["Month", None, None, None, None]
+                item_table_header_month_row = ["Month", None, None, None, None]
                 for month in MONTH_ORDER:
-                    total_all_header_month_row.extend([month, None])
-                total_all_header_month_row.extend(["RECAP", None, None])
-                all_rows_for_sheet_content.append(total_all_header_month_row)
+                    item_table_header_month_row.extend([month, None])
+                item_table_header_month_row.extend(["RECAP", None, None])
+                all_rows_for_sheet_content.append(item_table_header_month_row)
+                
+                # Add item rows
+                for item_key in sorted(item_summary_data_for_sheet.keys()):
+                    item_data = item_summary_data_for_sheet[item_key]
+                    item_row = [f"{item_data['item']} {item_data['gsm']} {item_data['addOn']}", None, None, None, None]
+                    for qty in item_data['monthlyQtys']:
+                        formatted_qty = format_qty_with_precision(qty) if qty > 0 else "-"
+                        item_row.extend([formatted_qty, None])
+                    total_recap_formatted = format_qty_with_precision(item_data['totalQtyRecap']) if item_data['totalQtyRecap'] > 0 else "-"
+                    item_row.extend([total_recap_formatted, None, None])
+                    all_rows_for_sheet_content.append(item_row)
+                
+                # Add "TOTAL ALL SUPPLIER/IMPORTER" section at the bottom - adjust text based on mode
+                entity_name = "IMPORTER" if supplier_as_sheet == "ya" else "SUPPLIER"
                 
                 # Calculate grand total
                 grand_total_all_suppliers = sum(sheet_overall_monthly_totals)
@@ -163,30 +178,6 @@ class JSStyleProcessor:
                     total_all_quartal_row.extend([formatted_quarterly, None, None, None, None, None])
                 total_all_quartal_row.extend([None, None, None])
                 all_rows_for_sheet_content.append(total_all_quartal_row)
-                
-                # Add separator
-                all_rows_for_sheet_content.append([])
-                
-                # Add "TOTAL PER ITEM" section
-                item_table_main_title_row = ["TOTAL PER ITEM"]
-                all_rows_for_sheet_content.append(item_table_main_title_row)
-                
-                item_table_header_month_row = ["Month", None, None, None, None]
-                for month in MONTH_ORDER:
-                    item_table_header_month_row.extend([month, None])
-                item_table_header_month_row.extend(["RECAP", None, None])
-                all_rows_for_sheet_content.append(item_table_header_month_row)
-                
-                # Add item rows
-                for item_key in sorted(item_summary_data_for_sheet.keys()):
-                    item_data = item_summary_data_for_sheet[item_key]
-                    item_row = [f"{item_data['item']} {item_data['gsm']} {item_data['addOn']}", None, None, None, None]
-                    for qty in item_data['monthlyQtys']:
-                        formatted_qty = format_qty_with_precision(qty) if qty > 0 else "-"
-                        item_row.extend([formatted_qty, None])
-                    total_recap_formatted = format_qty_with_precision(item_data['totalQtyRecap']) if item_data['totalQtyRecap'] > 0 else "-"
-                    item_row.extend([total_recap_formatted, None, None])
-                    all_rows_for_sheet_content.append(item_row)
                 
                 result = {
                     'name': sheet_base_name,
