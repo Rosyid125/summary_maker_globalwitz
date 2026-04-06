@@ -16,12 +16,14 @@ A Python application with Tkinter GUI for processing Excel import/export data an
 
 ## Requirements
 
-- Python 3.7 or higher
+- Python 3.14 (supported target runtime)
 - Required packages (install via `pip install -r requirements.txt`):
-  - pandas==2.0.3
-  - openpyxl==3.1.2
-  - python-dateutil==2.8.2
-  - xlsxwriter==3.1.9
+  - numpy>=2.1.0
+  - pandas>=2.3.0
+  - openpyxl>=3.1.5
+  - python-dateutil>=2.9.0.post0
+  - xlsxwriter>=3.2.0
+  - pyinstaller>=6.14.0
 
 ## Installation
 

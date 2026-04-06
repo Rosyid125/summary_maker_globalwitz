@@ -305,6 +305,7 @@ class JSStyleExcelReader:
                 # Process date
                 date_value = get_column_value(row, 'date', ["Arrival Date", "DATE", "CUSTOMS CLEARANCE DATE"])
                 month = "-"
+                year_val = "-"
                 
                 if date_value is not None:
                     parsed_date = None
@@ -319,6 +320,7 @@ class JSStyleExcelReader:
                     
                     if parsed_date:
                         month = self.get_month_name(parsed_date)
+                        year_val = parsed_date.year
                 
                 # Process other fields - support both GUI mapping keys and original keys
                 hs_code = safe_string_value(get_column_value(row, 'hs_code', ["HS Code", "HS CODE"]) or
@@ -351,6 +353,7 @@ class JSStyleExcelReader:
                 
                 processed_row = {
                     'month': month,
+                    'year': year_val,
                     'hsCode': hs_code,
                     'itemDesc': item_desc,
                     'gsm': gsm,

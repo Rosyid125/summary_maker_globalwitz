@@ -49,7 +49,10 @@ class OutputFormatter:
     def prepare_group_block(self, group_name: str, summary_lvl1_data: List[Dict], 
                           summary_lvl2_data: List[Dict], incoterm_value: str, 
                           incoterm_mode: str = "manual", raw_data: List[Dict] = None,
-                          supplier_as_sheet: str = "tidak") -> Dict[str, Any]:
+                          supplier_as_sheet: str = "tidak", dynamic_months: List[str] = None) -> Dict[str, Any]:
+        if dynamic_months is None:
+            from ..utils.constants import MONTH_ORDER
+            dynamic_months = list(MONTH_ORDER)
         """
         Prepare group block exactly like JavaScript prepareGroupBlock function
         
@@ -76,7 +79,7 @@ class OutputFormatter:
         
         header_row2 = [None, None, None, None, None]
         
-        for month in MONTH_ORDER:
+        for month in dynamic_months:
             header_row1.extend([month, None])
             header_row2.extend(["PRICE", "QTY"])
         
@@ -86,7 +89,7 @@ class OutputFormatter:
         group_block_rows.append(header_row1)
         group_block_rows.append(header_row2)
         
-        monthly_totals = [0] * 12
+        monthly_totals = [0] * len(dynamic_months)
         
         # Get distinct combinations
         distinct_combinations = []
@@ -121,7 +124,7 @@ class OutputFormatter:
             data_row.append(combo['addOn'])
             
             # Add monthly data
-            for month_index, month in enumerate(MONTH_ORDER):
+            for month_index, month in enumerate(dynamic_months):
                 month_data = None
                 for d in summary_lvl1_data:
                     if (d['hsCode'] == combo['hsCode'] and 
@@ -177,31 +180,18 @@ class OutputFormatter:
             group_block_rows.append(total_qty_per_mo_row)
             
             # Add quarterly totals
-            quarterly_totals = [0, 0, 0, 0]
+            quarterly_totals = [0] * (len(dynamic_months) // 3 + (1 if len(dynamic_months) % 3 != 0 else 0))
             for index, total in enumerate(monthly_totals):
                 num_total = total if isinstance(total, (int, float)) else 0
-                if index < 3:
-                    quarterly_totals[0] += num_total
-                elif index < 6:
-                    quarterly_totals[1] += num_total
-                elif index < 9:
-                    quarterly_totals[2] += num_total
-                else:
-                    quarterly_totals[3] += num_total
+                q_idx = index // 3
+                if q_idx < len(quarterly_totals):
+                    quarterly_totals[q_idx] += num_total
             
             total_qty_per_quartal_row = ["TOTAL QTY PER QUARTAL", "-", "-", "-", "-"]
-            # Q1 (Jan-Mar) - store raw numeric values
-            q1_display = quarterly_totals[0] if quarterly_totals[0] > 0 else "-"
-            total_qty_per_quartal_row.extend([q1_display, "-", "-", "-", "-", "-"])
-            # Q2 (Apr-Jun)  
-            q2_display = quarterly_totals[1] if quarterly_totals[1] > 0 else "-"
-            total_qty_per_quartal_row.extend([q2_display, "-", "-", "-", "-", "-"])
-            # Q3 (Jul-Sep)
-            q3_display = quarterly_totals[2] if quarterly_totals[2] > 0 else "-"
-            total_qty_per_quartal_row.extend([q3_display, "-", "-", "-", "-", "-"])
-            # Q4 (Oct-Dec)
-            q4_display = quarterly_totals[3] if quarterly_totals[3] > 0 else "-"
-            total_qty_per_quartal_row.extend([q4_display, "-", "-", "-", "-", "-"])
+            for q_idx in range(len(quarterly_totals)):
+                q_display = quarterly_totals[q_idx] if quarterly_totals[q_idx] > 0 else "-"
+                total_qty_per_quartal_row.extend([q_display, "-", "-", "-", "-", "-"])
+            
             total_qty_per_quartal_row.extend(["-", "-", "-"])
             group_block_rows.append(total_qty_per_quartal_row)
         
@@ -514,6 +504,8 @@ class OutputFormatter:
     
     def _apply_advanced_formatting(self, worksheet, sheet_info, formats, start_row):
         """Apply advanced formatting to match ExcelJS output"""
+        num_months = int((sheet_info['totalColumns'] - 8) / 2)
+        num_quarters = int(num_months / 3) + (1 if num_months % 3 != 0 else 0)
         # Apply borders and center alignment to data cells, but skip empty separator rows
         total_rows = len(sheet_info['allRowsForSheetContent'])
         total_cols = sheet_info['totalColumns']
@@ -584,7 +576,7 @@ class OutputFormatter:
                 
                 # Merge monthly total cells
                 col = 5
-                for i in range(12):  # 12 months
+                for i in range(num_months):
                     value = ""
                     if (total_qty_per_mo_row - start_row < len(sheet_info['allRowsForSheetContent']) and 
                         col < len(sheet_info['allRowsForSheetContent'][total_qty_per_mo_row - start_row])):
@@ -600,7 +592,7 @@ class OutputFormatter:
                 
                 # Merge quarterly cells
                 col = 5
-                for q in range(4):  # 4 quarters
+                for q in range(num_quarters):
                     value = ""
                     if (quartal_row - start_row < len(sheet_info['allRowsForSheetContent']) and 
                         col < len(sheet_info['allRowsForSheetContent'][quartal_row - start_row])):
@@ -611,7 +603,7 @@ class OutputFormatter:
                     col += 6
                 
                 # Merge recap cell for totals
-                recap_start_col = 5 + 12 * 2  # 5 + 24 = 29
+                recap_start_col = 5 + num_months * 2  # 5 + 24 = 29
                 recap_value = ""
                 if (total_qty_per_mo_row - start_row < len(sheet_info['allRowsForSheetContent']) and 
                     recap_start_col < len(sheet_info['allRowsForSheetContent'][total_qty_per_mo_row - start_row])):
@@ -633,6 +625,8 @@ class OutputFormatter:
     
     def _format_group_headers(self, worksheet, header_start_row, formats, sheet_info, start_row):
         """Format the group headers with proper colors and merging"""
+        num_months = int((sheet_info['totalColumns'] - 8) / 2)
+        num_quarters = int(num_months / 3) + (1 if num_months % 3 != 0 else 0)
         # Get header row data
         header_row_data = []
         if header_start_row - start_row < len(sheet_info['allRowsForSheetContent']):
@@ -648,8 +642,8 @@ class OutputFormatter:
         col = 5
         quarter_formats = ['q1', 'q2', 'q3', 'q4']
         
-        for q in range(4):  # 4 quarters
-            q_format = formats[quarter_formats[q]]
+        for q in range(num_quarters):
+            q_format = formats[quarter_formats[q % 4]]
             for i in range(3):  # 3 months per quarter
                 # Get month name
                 month_value = header_row_data[col] if col < len(header_row_data) else ""
@@ -677,6 +671,8 @@ class OutputFormatter:
     
     def _format_total_per_item_section(self, worksheet, sheet_info, formats, start_row):
         """Format the TOTAL PER ITEM section (now includes TOTAL ALL SUPPLIER at bottom)"""
+        num_months = int((sheet_info['totalColumns'] - 8) / 2)
+        num_quarters = int(num_months / 3) + (1 if num_months % 3 != 0 else 0)
         # Find the total per item section
         total_per_item_start = -1
         total_per_item_header = -1
@@ -706,15 +702,15 @@ class OutputFormatter:
         col = 5
         quarter_formats = ['q1', 'q2', 'q3', 'q4']
         
-        for q in range(4):
-            q_format = formats[quarter_formats[q]]
+        for q in range(num_quarters):
+            q_format = formats[quarter_formats[q % 4]]
             for i in range(3):
                 worksheet.merge_range(header_row, col, header_row, col + 1, 
                                     sheet_info['allRowsForSheetContent'][total_per_item_header][col], q_format)
                 col += 2
         
         # Format recap
-        recap_start_col = 5 + 12 * 2
+        recap_start_col = 5 + num_months * 2
         worksheet.merge_range(header_row, recap_start_col, header_row, recap_start_col + 2, 
                             "RECAP", formats['recap'])
         
@@ -733,7 +729,7 @@ class OutputFormatter:
                 worksheet.merge_range(current_item_row, 0, current_item_row, 4, 
                                     first_cell, formats['total_all_period'])
                 col = 5
-                for i in range(12):
+                for i in range(num_months):
                     value = row_data[col] if col < len(row_data) else "-"
                     # Write numeric values as numbers with proper formatting
                     if isinstance(value, (int, float)):
@@ -758,7 +754,7 @@ class OutputFormatter:
                 worksheet.merge_range(current_item_row, 0, current_item_row, 4, 
                                     first_cell, formats['total_all_period'])
                 col = 5
-                for q in range(4):
+                for q in range(num_quarters):
                     value = row_data[col] if col < len(row_data) else "-"
                     # Write numeric values as numbers with proper formatting
                     if isinstance(value, (int, float)):
@@ -783,7 +779,7 @@ class OutputFormatter:
             worksheet.merge_range(current_item_row, 0, current_item_row, 4, first_cell, formats['data_cell'])
             # Merge monthly columns
             col = 5
-            for i in range(12):
+            for i in range(num_months):
                 value = row_data[col] if col < len(row_data) else ""
                 if isinstance(value, (int, float)):
                     worksheet.merge_range(current_item_row, col, current_item_row, col + 1, value, formats['data_cell'])

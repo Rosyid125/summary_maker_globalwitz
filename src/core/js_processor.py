@@ -23,7 +23,10 @@ class JSStyleProcessor:
     
     def process_sheet_data(self, data_to_process: List[Dict], sheet_base_name: str, 
                           incoterm_value: str, incoterm_mode: str = "manual", 
-                          supplier_as_sheet: str = "tidak") -> Optional[Dict[str, Any]]:
+                          supplier_as_sheet: str = "tidak", dynamic_months: List[str] = None) -> Optional[Dict[str, Any]]:
+        if dynamic_months is None:
+            from ..utils.constants import MONTH_ORDER
+            dynamic_months = list(MONTH_ORDER)
         """
         Process sheet data exactly like JavaScript processSheetData function
         
@@ -58,10 +61,10 @@ class JSStyleProcessor:
             
             all_rows_for_sheet_content = []
             supplier_groups_meta = []
-            sheet_overall_monthly_totals = [0] * 12
+            sheet_overall_monthly_totals = [0] * len(dynamic_months)
             item_summary_data_for_sheet = {}
             
-            total_columns = 5 + len(MONTH_ORDER) * 2 + 3
+            total_columns = 5 + len(dynamic_months) * 2 + 3
             
             # Process each supplier group
             group_keys = sorted(grouped_by_supplier_or_origin.keys())
@@ -79,7 +82,7 @@ class JSStyleProcessor:
                 if summary_lvl2:
                     # Prepare group block
                     group_block = self.formatter.prepare_group_block(group_name, summary_lvl1, summary_lvl2, 
-                                                                   incoterm_value, incoterm_mode, group_data, supplier_as_sheet)
+                                                                   incoterm_value, incoterm_mode, group_data, supplier_as_sheet, dynamic_months)
                     
                     all_rows_for_sheet_content.extend(group_block['groupBlockRows'])
                     
@@ -93,7 +96,7 @@ class JSStyleProcessor:
                     # Update sheet overall monthly totals and item summary
                     for lvl1_row in summary_lvl1:
                         try:
-                            month_index = MONTH_ORDER.index(lvl1_row['month'])
+                            month_index = dynamic_months.index(lvl1_row['month'])
                             qty_to_add = lvl1_row['totalQty'] if isinstance(lvl1_row['totalQty'], (int, float)) else 0
                             sheet_overall_monthly_totals[month_index] += qty_to_add
                             
@@ -104,7 +107,7 @@ class JSStyleProcessor:
                                     'item': lvl1_row['item'],
                                     'gsm': lvl1_row['gsm'],
                                     'addOn': lvl1_row['addOn'],
-                                    'monthlyQtys': [0] * 12,
+                                    'monthlyQtys': [0] * len(dynamic_months),
                                     'totalQtyRecap': 0
                                 }
                             
@@ -130,7 +133,7 @@ class JSStyleProcessor:
                 all_rows_for_sheet_content.append(item_table_main_title_row)
                 
                 item_table_header_month_row = ["Month", None, None, None, None]
-                for month in MONTH_ORDER:
+                for month in dynamic_months:
                     item_table_header_month_row.extend([month, None])
                 item_table_header_month_row.extend(["RECAP", None, None])
                 all_rows_for_sheet_content.append(item_table_header_month_row)
@@ -165,16 +168,11 @@ class JSStyleProcessor:
                 all_rows_for_sheet_content.append(total_all_mo_row)
                 
                 # Calculate quarterly totals
-                quarterly_totals_all = [0, 0, 0, 0]
+                quarterly_totals_all = [0] * (len(dynamic_months) // 3 + (1 if len(dynamic_months) % 3 != 0 else 0))
                 for i, total in enumerate(sheet_overall_monthly_totals):
-                    if i < 3:
-                        quarterly_totals_all[0] += total
-                    elif i < 6:
-                        quarterly_totals_all[1] += total
-                    elif i < 9:
-                        quarterly_totals_all[2] += total
-                    else:
-                        quarterly_totals_all[3] += total
+                    q_idx = i // 3
+                    if q_idx < len(quarterly_totals_all):
+                        quarterly_totals_all[q_idx] += total
                 
                 total_all_quartal_row = [f"TOTAL ALL {entity_name} PER QUARTAL", "-", "-", "-", "-"]
                 for quarterly_total in quarterly_totals_all:
@@ -222,6 +220,37 @@ class JSStyleProcessor:
         try:
             self.logger.info(f"Starting data processing with {len(all_raw_data)} rows, supplier_as_sheet={supplier_as_sheet}")
             
+            # Discover unique years
+            years = set()
+            for row in all_raw_data:
+                y = row.get('year', '-')
+                if y != "-":
+                    try:
+                        years.add(int(y))
+                    except:
+                        pass
+            
+            years = sorted(list(years))
+            
+            from ..utils.constants import MONTH_ORDER
+            dynamic_months = []
+            if len(years) > 1:
+                period_year = "-".join(str(y) for y in years)
+                for y in years:
+                    for m in MONTH_ORDER:
+                        dynamic_months.append(f"{m}-{y}")
+                # Update 'month' field in raw data
+                for row in all_raw_data:
+                    m = row.get('month', '-')
+                    y = row.get('year', '-')
+                    if m != "-" and y != "-":
+                        row['month'] = f"{m}-{y}"
+            elif len(years) == 1:
+                period_year = str(years[0])
+                dynamic_months = list(MONTH_ORDER)
+            else:
+                dynamic_months = list(MONTH_ORDER)
+
             # If supplier_as_sheet is "ya", swap supplier and importer data
             if supplier_as_sheet == "ya":
                 self.logger.info("Swapping supplier and importer data for 'supplier sebagai sheet' mode")
@@ -255,7 +284,7 @@ class JSStyleProcessor:
                 self.logger.info("Processing data without importer...")
                 sheet_name_for_blank = "Data_Tanpa_Importer" if supplier_as_sheet == "tidak" else "Data_Tanpa_Supplier"
                 sheet_result = self.process_sheet_data(data_with_blank_or_na_importer, sheet_name_for_blank, 
-                                                     global_incoterm, incoterm_mode, supplier_as_sheet)
+                                                     global_incoterm, incoterm_mode, supplier_as_sheet, dynamic_months)
                 if sheet_result:
                     workbook_data_for_excel_js.append(sheet_result)
                     self.logger.info("Successfully processed data without importer")
@@ -279,7 +308,7 @@ class JSStyleProcessor:
                         base_sheet_name = base_sheet_name[:30]  # Limit to 30 characters
                         
                         sheet_result = self.process_sheet_data(importer_data, base_sheet_name, 
-                                                              global_incoterm, incoterm_mode, supplier_as_sheet)
+                                                              global_incoterm, incoterm_mode, supplier_as_sheet, dynamic_months)
                         if sheet_result:
                             workbook_data_for_excel_js.append(sheet_result)
                             self.logger.info(f"Successfully processed {entity_label[:-1]} '{importer}'")
