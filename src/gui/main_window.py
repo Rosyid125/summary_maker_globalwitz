@@ -19,6 +19,8 @@ from ..core.js_processor import JSStyleProcessor
 
 class MainWindow:
     """Main application window"""
+    DEFAULT_COMBINATION_MODE_LABEL = "item + gsm + addon"
+    FIBER_COMBINATION_MODE_LABEL = "item + gsm + addon + denier + length + lustre"
     
     def __init__(self, root, logger):
         self.root = root
@@ -42,6 +44,7 @@ class MainWindow:
         self.incoterm = tk.StringVar(value="-")
         self.incoterm_mode = tk.StringVar(value="manual")  # "manual" or "from_column"
         self.supplier_as_sheet = tk.StringVar(value="tidak")  # "ya" or "tidak"
+        self.combination_mode = tk.StringVar(value=self.DEFAULT_COMBINATION_MODE_LABEL)
         self.output_filename = tk.StringVar()
         
         # Column mapping variables
@@ -52,6 +55,9 @@ class MainWindow:
             'gsm': tk.StringVar(),
             'item': tk.StringVar(),
             'add_on': tk.StringVar(),
+            'denier': tk.StringVar(),
+            'length': tk.StringVar(),
+            'lustre': tk.StringVar(),
             'importer': tk.StringVar(),
             'supplier': tk.StringVar(),
             'origin_country': tk.StringVar(),
@@ -64,6 +70,22 @@ class MainWindow:
         self.processing = False
         
         self.setup_ui()
+
+    def get_combination_mode_value(self):
+        """Return normalized combination mode for processing."""
+        mode = self.combination_mode.get()
+        return "fiber" if mode == self.FIBER_COMBINATION_MODE_LABEL else "default"
+
+    def get_visible_mapping_keys(self):
+        """Return mapping keys shown for the selected combination mode."""
+        visible_keys = [
+            'date', 'hs_code', 'item_description', 'gsm', 'item', 'add_on',
+            'importer', 'supplier', 'origin_country', 'unit_price', 'quantity', 'incoterms'
+        ]
+        if self.get_combination_mode_value() == "fiber":
+            insert_at = visible_keys.index('add_on') + 1
+            visible_keys[insert_at:insert_at] = ['denier', 'length', 'lustre']
+        return visible_keys
     
     def on_incoterm_mode_change(self, event=None):
         """Handle incoterm mode change to update UI visibility"""
@@ -77,13 +99,16 @@ class MainWindow:
     
     def update_field_descriptions(self):
         """Update field descriptions based on supplier_as_sheet setting"""
-        self.field_descriptions = {
+        all_field_descriptions = {
             'date': 'Date/Invoice Date',
             'hs_code': 'HS Code',
             'item_description': 'Item Description',
             'gsm': 'GSM (grams per square meter)',
             'item': 'Item/Product Name',
             'add_on': 'Add On/Additional Info',
+            'denier': 'Denier',
+            'length': 'Length',
+            'lustre': 'Lustre',
             'importer': 'Importer Name',
             'supplier': 'Supplier Name',
             'origin_country': 'Origin Country',
@@ -91,10 +116,44 @@ class MainWindow:
             'quantity': 'Quantity',
             'incoterms': 'Incoterms (for auto-read mode)'
         }
+        self.field_descriptions = {
+            key: all_field_descriptions[key]
+            for key in self.get_visible_mapping_keys()
+        }
         
         # If supplier as sheet is enabled, descriptions stay the same
         # The actual swapping happens during processing, not in the UI labels
         return self.field_descriptions
+
+    def on_combination_mode_change(self, event=None):
+        """Handle combination mode change and rebuild mapping controls."""
+        mode_value = self.get_combination_mode_value()
+        self.rebuild_column_mapping_fields()
+        if mode_value == "fiber":
+            self.log_message("Combination Mode: fiber - Denier, Length, and Lustre are included in combinations")
+        else:
+            self.log_message("Combination Mode: default - Item, GSM, and Add On are used for combinations")
+
+    def rebuild_column_mapping_fields(self):
+        """Rebuild visible mapping widgets while preserving StringVar values."""
+        if not hasattr(self, 'mapping_scrollable_frame'):
+            return
+        for child in self.mapping_scrollable_frame.winfo_children():
+            child.destroy()
+        self.mapping_widgets = {}
+        field_descriptions = self.update_field_descriptions()
+        for i, (field_key, description) in enumerate(field_descriptions.items()):
+            ttk.Label(self.mapping_scrollable_frame, text=f"{description}:").grid(row=i, column=0, sticky='w', pady=2)
+            combo = ttk.Combobox(
+                self.mapping_scrollable_frame,
+                textvariable=self.column_mappings[field_key],
+                state='readonly',
+                width=40
+            )
+            combo['values'] = self.available_columns if self.available_columns else [""]
+            combo.grid(row=i, column=1, sticky='ew', padx=(10, 0), pady=2)
+            self.mapping_widgets[field_key] = combo
+        self.mapping_scrollable_frame.columnconfigure(1, weight=1)
     
     def on_supplier_as_sheet_change(self):
         """Handle supplier as sheet option change"""
@@ -252,10 +311,17 @@ class MainWindow:
         auto_btn.grid(row=3, column=3, padx=(10, 0), pady=2)
         
         # Supplier as sheet option
-        ttk.Label(other_section, text="Supplier sebagai Sheet:").grid(row=4, column=0, sticky='w', pady=2)
+        ttk.Label(other_section, text="COMBINATION MODE:").grid(row=4, column=0, sticky='w', pady=2)
+        self.combination_mode_combo = ttk.Combobox(other_section, textvariable=self.combination_mode,
+                                                  values=[self.DEFAULT_COMBINATION_MODE_LABEL, self.FIBER_COMBINATION_MODE_LABEL],
+                                                  state="readonly", width=45)
+        self.combination_mode_combo.grid(row=4, column=1, columnspan=2, sticky='w', padx=(10, 0), pady=2)
+        self.combination_mode_combo.bind('<<ComboboxSelected>>', self.on_combination_mode_change)
+
+        ttk.Label(other_section, text="Supplier sebagai Sheet:").grid(row=5, column=0, sticky='w', pady=2)
         
         supplier_frame = ttk.Frame(other_section)
-        supplier_frame.grid(row=4, column=1, columnspan=2, sticky='w', padx=(10, 0), pady=2)
+        supplier_frame.grid(row=5, column=1, columnspan=2, sticky='w', padx=(10, 0), pady=2)
         
         supplier_ya_radio = ttk.Radiobutton(supplier_frame, text="Ya", variable=self.supplier_as_sheet, value="ya", command=self.on_supplier_as_sheet_change)
         supplier_ya_radio.pack(side='left')
@@ -265,7 +331,7 @@ class MainWindow:
         # Info label for supplier as sheet option
         supplier_info_label = ttk.Label(other_section, text="Pilih Ya jika Anda membalikkan Supplier dan Importer", 
                                        font=('TkDefaultFont', 8), foreground='gray')
-        supplier_info_label.grid(row=5, column=1, columnspan=2, sticky='w', padx=(10, 0), pady=2)
+        supplier_info_label.grid(row=6, column=1, columnspan=2, sticky='w', padx=(10, 0), pady=2)
         
         other_section.columnconfigure(1, weight=1)
         
@@ -290,6 +356,7 @@ class MainWindow:
         canvas = tk.Canvas(mapping_section)
         scrollbar = ttk.Scrollbar(mapping_section, orient="vertical", command=canvas.yview)
         scrollable_frame = ttk.Frame(canvas)
+        self.mapping_scrollable_frame = scrollable_frame
         
         scrollable_frame.bind(
             "<Configure>",
@@ -303,18 +370,7 @@ class MainWindow:
         self.mapping_widgets = {}
         
         # Update field descriptions based on supplier_as_sheet setting
-        field_descriptions = self.update_field_descriptions()
-        
-        for i, (field_key, description) in enumerate(field_descriptions.items()):
-            ttk.Label(scrollable_frame, text=f"{description}:").grid(row=i, column=0, sticky='w', pady=2)
-            
-            combo = ttk.Combobox(scrollable_frame, textvariable=self.column_mappings[field_key], 
-                               state='readonly', width=40)
-            combo.grid(row=i, column=1, sticky='ew', padx=(10, 0), pady=2)
-            
-            self.mapping_widgets[field_key] = combo
-        
-        scrollable_frame.columnconfigure(1, weight=1)
+        self.rebuild_column_mapping_fields()
         
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
@@ -655,6 +711,9 @@ class MainWindow:
             'gsm': ['gsm', 'gram', 'weight', 'gross weight', 'net weight', 'berat'],
             'item': ['item', 'product', 'produk', 'barang', 'goods', 'merchandise'],
             'add_on': ['add on', 'addon', 'additional', 'tambahan', 'remark', 'note', 'keterangan'],
+            'denier': ['denier', 'den', 'dny'],
+            'length': ['length', 'len', 'panjang'],
+            'lustre': ['lustre', 'luster', 'kilap'],
             'importer': ['importer', 'buyer', 'pembeli', 'consignee', 'penerima'],
             'supplier': ['supplier', 'seller', 'penjual', 'exporter', 'shipper', 'pengirim'],
             'origin_country': ['origin', 'country', 'negara', 'asal', 'source', 'from'],
@@ -664,7 +723,10 @@ class MainWindow:
         
         mapped_count = 0
         
+        visible_mapping_keys = set(self.get_visible_mapping_keys())
         for field_key, patterns in mapping_patterns.items():
+            if field_key not in visible_mapping_keys:
+                continue
             best_match = None
             best_score = 0
             
@@ -727,7 +789,8 @@ class MainWindow:
             return
         
         # Check if at least some columns are mapped
-        mapped_columns = sum(1 for var in self.column_mappings.values() if var.get())
+        visible_mapping_keys = self.get_visible_mapping_keys()
+        mapped_columns = sum(1 for key in visible_mapping_keys if self.column_mappings[key].get())
         if mapped_columns < 3:
             messagebox.showerror("Error", "Please map at least 3 columns!")
             return
@@ -748,7 +811,9 @@ class MainWindow:
             self.root.after(0, lambda: self.progress_var.set(10))
             
             # Get column mappings
-            column_mapping = {key: var.get() for key, var in self.column_mappings.items() if var.get()}
+            visible_mapping_keys = self.get_visible_mapping_keys()
+            column_mapping = {key: self.column_mappings[key].get() for key in visible_mapping_keys if self.column_mappings[key].get()}
+            combination_mode = self.get_combination_mode_value()
             
             # Read data using JavaScript-style reader
             all_raw_data = self.js_excel_reader.read_and_preprocess_data(
@@ -756,7 +821,8 @@ class MainWindow:
                 self.selected_sheet.get(),
                 self.date_format.get(),
                 self.number_format.get(),
-                column_mapping
+                column_mapping,
+                combination_mode
             )
             
             if not all_raw_data:
@@ -791,7 +857,7 @@ class MainWindow:
             supplier_as_sheet_mode = self.supplier_as_sheet.get()
             output_filename = self.output_filename.get() or "summary_output.xlsx"
             
-            self.logger.info(f"Processing with period_year='{period_year}', global_incoterm='{global_incoterm}', incoterm_mode='{incoterm_mode}', supplier_as_sheet='{supplier_as_sheet_mode}', output_filename='{output_filename}'")
+            self.logger.info(f"Processing with period_year='{period_year}', global_incoterm='{global_incoterm}', incoterm_mode='{incoterm_mode}', supplier_as_sheet='{supplier_as_sheet_mode}', combination_mode='{combination_mode}', output_filename='{output_filename}'")
             
             self.root.after(0, lambda: self.progress_var.set(60))
             
@@ -805,7 +871,8 @@ class MainWindow:
                     global_incoterm,
                     incoterm_mode,
                     output_filename,
-                    supplier_as_sheet_mode
+                    supplier_as_sheet_mode,
+                    combination_mode
                 )
                 
                 if not output_path:

@@ -16,6 +16,27 @@ class OutputFormatter:
     
     def __init__(self, logger):
         self.logger = logger
+
+    def _get_combination_fields(self, combination_mode: str = "default") -> List[str]:
+        fields = ['hsCode', 'item', 'gsm', 'addOn']
+        if combination_mode == "fiber":
+            fields.extend(['denier', 'length', 'lustre'])
+        return fields
+
+    def _get_identity_headers(self, supplier_as_sheet: str = "tidak", combination_mode: str = "default") -> List[str]:
+        group_header = "IMPORTER" if supplier_as_sheet == "ya" else "SUPPLIER"
+        headers = [group_header, "HS CODE", "ITEM", "GSM", "ADD ON"]
+        if combination_mode == "fiber":
+            headers.extend(["DENIER", "LENGTH", "LUSTRE"])
+        return headers
+
+    def _get_identity_column_count(self, sheet_info: Dict = None, combination_mode: str = "default") -> int:
+        if sheet_info and sheet_info.get('identityColumnCount'):
+            return sheet_info['identityColumnCount']
+        return len(self._get_identity_headers("tidak", combination_mode))
+
+    def _combo_matches(self, data_row: Dict, combo: Dict, combination_mode: str = "default") -> bool:
+        return all(data_row.get(field) == combo.get(field) for field in self._get_combination_fields(combination_mode))
     
     def extract_incoterm_from_value(self, incoterm_value: str) -> str:
         """Extract first 3 uppercase characters from incoterm value"""
@@ -29,17 +50,15 @@ class OutputFormatter:
             return "-"
     
     def get_incoterm_for_combination(self, combo: Dict, raw_data: List[Dict], 
-                                   incoterm_mode: str, default_incoterm: str) -> str:
+                                   incoterm_mode: str, default_incoterm: str,
+                                   combination_mode: str = "default") -> str:
         """Get incoterm value for a specific combination based on mode"""
         if incoterm_mode == "manual":
             return default_incoterm
         
         # For from_column mode, find the first matching row and extract incoterm
         for row in raw_data:
-            if (row.get('hsCode') == combo['hsCode'] and 
-                row.get('item') == combo['item'] and 
-                row.get('gsm') == combo['gsm'] and 
-                row.get('addOn') == combo['addOn']):
+            if self._combo_matches(row, combo, combination_mode):
                 
                 incoterm_raw = row.get('incoterms', '')
                 return self.extract_incoterm_from_value(incoterm_raw)
@@ -49,7 +68,8 @@ class OutputFormatter:
     def prepare_group_block(self, group_name: str, summary_lvl1_data: List[Dict], 
                           summary_lvl2_data: List[Dict], incoterm_value: str, 
                           incoterm_mode: str = "manual", raw_data: List[Dict] = None,
-                          supplier_as_sheet: str = "tidak", dynamic_months: List[str] = None) -> Dict[str, Any]:
+                          supplier_as_sheet: str = "tidak", dynamic_months: List[str] = None,
+                          combination_mode: str = "default") -> Dict[str, Any]:
         if dynamic_months is None:
             from ..utils.constants import MONTH_ORDER
             dynamic_months = list(MONTH_ORDER)
@@ -70,14 +90,13 @@ class OutputFormatter:
         """
         group_block_rows = []
         header_row_count = 2
+        combination_fields = self._get_combination_fields(combination_mode)
+        identity_headers = self._get_identity_headers(supplier_as_sheet, combination_mode)
+        identity_column_count = len(identity_headers)
         
         # Create header rows - adjust based on supplier_as_sheet mode
-        if supplier_as_sheet == "ya":
-            header_row1 = ["IMPORTER", "HS CODE", "ITEM", "GSM", "ADD ON"]
-        else:
-            header_row1 = ["SUPPLIER", "HS CODE", "ITEM", "GSM", "ADD ON"]
-        
-        header_row2 = [None, None, None, None, None]
+        header_row1 = list(identity_headers)
+        header_row2 = [None] * identity_column_count
         
         for month in dynamic_months:
             header_row1.extend([month, None])
@@ -94,23 +113,13 @@ class OutputFormatter:
         # Get distinct combinations
         distinct_combinations = []
         for item in summary_lvl2_data:
-            combo = {
-                'hsCode': item['hsCode'],
-                'item': item['item'],
-                'gsm': item['gsm'],
-                'addOn': item['addOn']
-            }
+            combo = {field: item.get(field, "") for field in combination_fields}
             if combo not in distinct_combinations:
                 distinct_combinations.append(combo)
         
         # Sort distinct combinations - ensure all values are strings to avoid comparison errors
         def safe_sort_key(x):
-            return (
-                str(x['hsCode']) if x['hsCode'] is not None else "",
-                str(x['item']) if x['item'] is not None else "",
-                str(x['gsm']) if x['gsm'] is not None else "",
-                str(x['addOn']) if x['addOn'] is not None else ""
-            )
+            return tuple(str(x.get(field)) if x.get(field) is not None else "" for field in combination_fields)
         
         distinct_combinations.sort(key=safe_sort_key)
         
@@ -118,20 +127,14 @@ class OutputFormatter:
         for index, combo in enumerate(distinct_combinations):
             data_row = []
             data_row.append(group_name if index == 0 else None)
-            data_row.append(combo['hsCode'])
-            data_row.append(combo['item'])
-            data_row.append(combo['gsm'])
-            data_row.append(combo['addOn'])
+            for field in combination_fields:
+                data_row.append(combo[field])
             
             # Add monthly data
             for month_index, month in enumerate(dynamic_months):
                 month_data = None
                 for d in summary_lvl1_data:
-                    if (d['hsCode'] == combo['hsCode'] and 
-                        d['item'] == combo['item'] and 
-                        d['gsm'] == combo['gsm'] and 
-                        d['addOn'] == combo['addOn'] and 
-                        d['month'] == month):
+                    if self._combo_matches(d, combo, combination_mode) and d['month'] == month:
                         month_data = d
                         break
                 
@@ -147,10 +150,7 @@ class OutputFormatter:
             # Add recap data
             recap_data = None
             for d in summary_lvl2_data:
-                if (d['hsCode'] == combo['hsCode'] and 
-                    d['item'] == combo['item'] and 
-                    d['gsm'] == combo['gsm'] and 
-                    d['addOn'] == combo['addOn']):
+                if self._combo_matches(d, combo, combination_mode):
                     recap_data = d
                     break
             
@@ -158,7 +158,7 @@ class OutputFormatter:
                 # Store raw numeric values instead of formatted strings
                 avg_price = recap_data['avgOfSummaryPrice'] if recap_data['avgOfSummaryPrice'] else "-"
                 # Get incoterm based on mode
-                combo_incoterm = self.get_incoterm_for_combination(combo, raw_data or [], incoterm_mode, incoterm_value)
+                combo_incoterm = self.get_incoterm_for_combination(combo, raw_data or [], incoterm_mode, incoterm_value, combination_mode)
                 total_qty = recap_data['totalOfSummaryQty'] if recap_data['totalOfSummaryQty'] else "-"
                 data_row.extend([avg_price, combo_incoterm, total_qty])
             else:
@@ -171,7 +171,7 @@ class OutputFormatter:
         
         if distinct_combinations:
             # Add total qty per month row
-            total_qty_per_mo_row = ["TOTAL QTY PER MO", "-", "-", "-", "-"]
+            total_qty_per_mo_row = ["TOTAL QTY PER MO"] + ["-"] * (identity_column_count - 1)
             for total in monthly_totals:
                 # Store raw numeric values instead of formatted strings
                 display_total = total if (isinstance(total, (int, float)) and total > 0) else "-"
@@ -187,7 +187,7 @@ class OutputFormatter:
                 if q_idx < len(quarterly_totals):
                     quarterly_totals[q_idx] += num_total
             
-            total_qty_per_quartal_row = ["TOTAL QTY PER QUARTAL", "-", "-", "-", "-"]
+            total_qty_per_quartal_row = ["TOTAL QTY PER QUARTAL"] + ["-"] * (identity_column_count - 1)
             for q_idx in range(len(quarterly_totals)):
                 q_display = quarterly_totals[q_idx] if quarterly_totals[q_idx] > 0 else "-"
                 total_qty_per_quartal_row.extend([q_display, "-", "-", "-", "-", "-"])
@@ -204,7 +204,8 @@ class OutputFormatter:
         }
     
     def write_output_to_file(self, workbook_data: List[Dict], output_filename: str = "summary_output.xlsx", 
-                           period_year: str = None, supplier_as_sheet: str = "tidak") -> str:
+                           period_year: str = None, supplier_as_sheet: str = "tidak",
+                           combination_mode: str = "default") -> str:
         """
         Write output to Excel file with advanced formatting using xlsxwriter
         Matches the ExcelJS formatting from the original JavaScript version
@@ -504,7 +505,8 @@ class OutputFormatter:
     
     def _apply_advanced_formatting(self, worksheet, sheet_info, formats, start_row):
         """Apply advanced formatting to match ExcelJS output"""
-        num_months = int((sheet_info['totalColumns'] - 8) / 2)
+        identity_column_count = self._get_identity_column_count(sheet_info)
+        num_months = int((sheet_info['totalColumns'] - identity_column_count - 3) / 2)
         num_quarters = int(num_months / 3) + (1 if num_months % 3 != 0 else 0)
         # Apply borders and center alignment to data cells, but skip empty separator rows
         total_rows = len(sheet_info['allRowsForSheetContent'])
@@ -571,11 +573,11 @@ class OutputFormatter:
                 quartal_row = total_qty_per_mo_row + 1
                 
                 # Format total qty per month row
-                worksheet.merge_range(total_qty_per_mo_row, 0, total_qty_per_mo_row, 4, 
+                worksheet.merge_range(total_qty_per_mo_row, 0, total_qty_per_mo_row, identity_column_count - 1, 
                                     "TOTAL QTY PER MO", formats['bold_data'])
                 
                 # Merge monthly total cells
-                col = 5
+                col = identity_column_count
                 for i in range(num_months):
                     value = ""
                     if (total_qty_per_mo_row - start_row < len(sheet_info['allRowsForSheetContent']) and 
@@ -587,11 +589,11 @@ class OutputFormatter:
                     col += 2
                 
                 # Format quarterly total row
-                worksheet.merge_range(quartal_row, 0, quartal_row, 4, 
+                worksheet.merge_range(quartal_row, 0, quartal_row, identity_column_count - 1, 
                                     "TOTAL QTY PER QUARTAL", formats['bold_data'])
                 
                 # Merge quarterly cells
-                col = 5
+                col = identity_column_count
                 for q in range(num_quarters):
                     value = ""
                     if (quartal_row - start_row < len(sheet_info['allRowsForSheetContent']) and 
@@ -603,7 +605,7 @@ class OutputFormatter:
                     col += 6
                 
                 # Merge recap cell for totals
-                recap_start_col = 5 + num_months * 2  # 5 + 24 = 29
+                recap_start_col = identity_column_count + num_months * 2
                 recap_value = ""
                 if (total_qty_per_mo_row - start_row < len(sheet_info['allRowsForSheetContent']) and 
                     recap_start_col < len(sheet_info['allRowsForSheetContent'][total_qty_per_mo_row - start_row])):
@@ -625,7 +627,8 @@ class OutputFormatter:
     
     def _format_group_headers(self, worksheet, header_start_row, formats, sheet_info, start_row):
         """Format the group headers with proper colors and merging"""
-        num_months = int((sheet_info['totalColumns'] - 8) / 2)
+        identity_column_count = self._get_identity_column_count(sheet_info)
+        num_months = int((sheet_info['totalColumns'] - identity_column_count - 3) / 2)
         num_quarters = int(num_months / 3) + (1 if num_months % 3 != 0 else 0)
         # Get header row data
         header_row_data = []
@@ -633,13 +636,13 @@ class OutputFormatter:
             header_row_data = sheet_info['allRowsForSheetContent'][header_start_row - start_row]
         
         # Merge cells for supplier columns
-        for col in range(5):
+        for col in range(identity_column_count):
             value = header_row_data[col] if col < len(header_row_data) else ""
             worksheet.merge_range(header_start_row, col, header_start_row + 1, col, 
                                 value, formats['supplier_cols'])
         
         # Format monthly columns with quarterly colors
-        col = 5
+        col = identity_column_count
         quarter_formats = ['q1', 'q2', 'q3', 'q4']
         
         for q in range(num_quarters):
@@ -671,7 +674,8 @@ class OutputFormatter:
     
     def _format_total_per_item_section(self, worksheet, sheet_info, formats, start_row):
         """Format the TOTAL PER ITEM section (now includes TOTAL ALL SUPPLIER at bottom)"""
-        num_months = int((sheet_info['totalColumns'] - 8) / 2)
+        identity_column_count = self._get_identity_column_count(sheet_info)
+        num_months = int((sheet_info['totalColumns'] - identity_column_count - 3) / 2)
         num_quarters = int(num_months / 3) + (1 if num_months % 3 != 0 else 0)
         # Find the total per item section
         total_per_item_start = -1
@@ -694,12 +698,12 @@ class OutputFormatter:
         
         # Format header row
         header_row = start_row + total_per_item_header
-        worksheet.merge_range(header_row, 0, header_row, 4, 
+        worksheet.merge_range(header_row, 0, header_row, identity_column_count - 1, 
                             sheet_info['allRowsForSheetContent'][total_per_item_header][0], 
                             formats['supplier_cols'])
         
         # Format monthly columns
-        col = 5
+        col = identity_column_count
         quarter_formats = ['q1', 'q2', 'q3', 'q4']
         
         for q in range(num_quarters):
@@ -710,7 +714,7 @@ class OutputFormatter:
                 col += 2
         
         # Format recap
-        recap_start_col = 5 + num_months * 2
+        recap_start_col = identity_column_count + num_months * 2
         worksheet.merge_range(header_row, recap_start_col, header_row, recap_start_col + 2, 
                             "RECAP", formats['recap'])
         
@@ -726,9 +730,9 @@ class OutputFormatter:
             
             # Format TOTAL ALL SUPPLIER PER MO row
             if first_cell.startswith("TOTAL ALL") and "PER MO" in first_cell:
-                worksheet.merge_range(current_item_row, 0, current_item_row, 4, 
+                worksheet.merge_range(current_item_row, 0, current_item_row, identity_column_count - 1, 
                                     first_cell, formats['total_all_period'])
-                col = 5
+                col = identity_column_count
                 for i in range(num_months):
                     value = row_data[col] if col < len(row_data) else "-"
                     # Write numeric values as numbers with proper formatting
@@ -751,9 +755,9 @@ class OutputFormatter:
             
             # Format TOTAL ALL SUPPLIER PER QUARTAL row
             if first_cell.startswith("TOTAL ALL") and "PER QUARTAL" in first_cell:
-                worksheet.merge_range(current_item_row, 0, current_item_row, 4, 
+                worksheet.merge_range(current_item_row, 0, current_item_row, identity_column_count - 1, 
                                     first_cell, formats['total_all_period'])
-                col = 5
+                col = identity_column_count
                 for q in range(num_quarters):
                     value = row_data[col] if col < len(row_data) else "-"
                     # Write numeric values as numbers with proper formatting
@@ -776,9 +780,9 @@ class OutputFormatter:
             
             # Regular item rows
             # Merge item columns
-            worksheet.merge_range(current_item_row, 0, current_item_row, 4, first_cell, formats['data_cell'])
+            worksheet.merge_range(current_item_row, 0, current_item_row, identity_column_count - 1, first_cell, formats['data_cell'])
             # Merge monthly columns
-            col = 5
+            col = identity_column_count
             for i in range(num_months):
                 value = row_data[col] if col < len(row_data) else ""
                 if isinstance(value, (int, float)):
@@ -812,7 +816,8 @@ class OutputFormatter:
             return "-"
     
     def get_incoterm_for_combination(self, combo: Dict, raw_data: List[Dict], 
-                                   incoterm_mode: str, default_incoterm: str) -> str:
+                                   incoterm_mode: str, default_incoterm: str,
+                                   combination_mode: str = "default") -> str:
         """
         Get incoterm value for a specific combination based on mode
         
@@ -830,10 +835,7 @@ class OutputFormatter:
         
         # For from_column mode, find the first matching row and extract incoterm
         for row in raw_data:
-            if (row.get('hsCode') == combo['hsCode'] and 
-                row.get('item') == combo['item'] and 
-                row.get('gsm') == combo['gsm'] and 
-                row.get('addOn') == combo['addOn']):
+            if self._combo_matches(row, combo, combination_mode):
                 
                 incoterm_raw = row.get('incoterms', '')
                 return self.extract_incoterm_from_value(incoterm_raw)

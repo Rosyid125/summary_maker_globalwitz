@@ -20,10 +20,23 @@ class JSStyleProcessor:
         self.logger = logger
         self.aggregator = DataAggregator(logger)
         self.formatter = OutputFormatter(logger)
+
+    def _get_combination_fields(self, combination_mode: str = "default") -> List[str]:
+        fields = ['hsCode', 'item', 'gsm', 'addOn']
+        if combination_mode == "fiber":
+            fields.extend(['denier', 'length', 'lustre'])
+        return fields
+
+    def _get_total_per_item_fields(self, combination_mode: str = "default") -> List[str]:
+        fields = ['item', 'gsm', 'addOn']
+        if combination_mode == "fiber":
+            fields.extend(['denier', 'length', 'lustre'])
+        return fields
     
     def process_sheet_data(self, data_to_process: List[Dict], sheet_base_name: str, 
                           incoterm_value: str, incoterm_mode: str = "manual", 
-                          supplier_as_sheet: str = "tidak", dynamic_months: List[str] = None) -> Optional[Dict[str, Any]]:
+                          supplier_as_sheet: str = "tidak", dynamic_months: List[str] = None,
+                          combination_mode: str = "default") -> Optional[Dict[str, Any]]:
         if dynamic_months is None:
             from ..utils.constants import MONTH_ORDER
             dynamic_months = list(MONTH_ORDER)
@@ -63,8 +76,11 @@ class JSStyleProcessor:
             supplier_groups_meta = []
             sheet_overall_monthly_totals = [0] * len(dynamic_months)
             item_summary_data_for_sheet = {}
+            combination_fields = self._get_combination_fields(combination_mode)
+            item_summary_fields = self._get_total_per_item_fields(combination_mode)
+            identity_column_count = 1 + len(combination_fields)
             
-            total_columns = 5 + len(dynamic_months) * 2 + 3
+            total_columns = identity_column_count + len(dynamic_months) * 2 + 3
             
             # Process each supplier group
             group_keys = sorted(grouped_by_supplier_or_origin.keys())
@@ -73,7 +89,7 @@ class JSStyleProcessor:
                 group_data = grouped_by_supplier_or_origin[group_name]
                 
                 # Perform aggregation
-                aggregation_result = self.aggregator.perform_aggregation(group_data)
+                aggregation_result = self.aggregator.perform_aggregation(group_data, combination_mode)
                 summary_lvl1 = aggregation_result['summaryLvl1']
                 summary_lvl2 = aggregation_result['summaryLvl2']
                 
@@ -82,7 +98,7 @@ class JSStyleProcessor:
                 if summary_lvl2:
                     # Prepare group block
                     group_block = self.formatter.prepare_group_block(group_name, summary_lvl1, summary_lvl2, 
-                                                                   incoterm_value, incoterm_mode, group_data, supplier_as_sheet, dynamic_months)
+                                                                   incoterm_value, incoterm_mode, group_data, supplier_as_sheet, dynamic_months, combination_mode)
                     
                     all_rows_for_sheet_content.extend(group_block['groupBlockRows'])
                     
@@ -101,12 +117,10 @@ class JSStyleProcessor:
                             sheet_overall_monthly_totals[month_index] += qty_to_add
                             
                             # Update item summary
-                            item_key = f"{lvl1_row['item']}-{lvl1_row['gsm']}-{lvl1_row['addOn']}"
+                            item_key = tuple(str(lvl1_row.get(field, "")) for field in item_summary_fields)
                             if item_key not in item_summary_data_for_sheet:
                                 item_summary_data_for_sheet[item_key] = {
-                                    'item': lvl1_row['item'],
-                                    'gsm': lvl1_row['gsm'],
-                                    'addOn': lvl1_row['addOn'],
+                                    'displayParts': [lvl1_row.get(field, "-") for field in item_summary_fields],
                                     'monthlyQtys': [0] * len(dynamic_months),
                                     'totalQtyRecap': 0
                                 }
@@ -132,7 +146,7 @@ class JSStyleProcessor:
                 item_table_main_title_row = ["TOTAL PER ITEM"]
                 all_rows_for_sheet_content.append(item_table_main_title_row)
                 
-                item_table_header_month_row = ["Month", None, None, None, None]
+                item_table_header_month_row = ["Month"] + [None] * (identity_column_count - 1)
                 for month in dynamic_months:
                     item_table_header_month_row.extend([month, None])
                 item_table_header_month_row.extend(["RECAP", None, None])
@@ -141,7 +155,8 @@ class JSStyleProcessor:
                 # Add item rows
                 for item_key in sorted(item_summary_data_for_sheet.keys()):
                     item_data = item_summary_data_for_sheet[item_key]
-                    item_row = [f"{item_data['item']} {item_data['gsm']} {item_data['addOn']}", "-", "-", "-", "-"]
+                    display_value = " ".join(str(part) for part in item_data['displayParts'] if str(part).strip())
+                    item_row = [display_value] + ["-"] * (identity_column_count - 1)
                     for qty in item_data['monthlyQtys']:
                         # Store raw numeric values instead of formatted strings - use "-" for empty cells
                         numeric_qty = qty if qty > 0 else "-"
@@ -157,7 +172,7 @@ class JSStyleProcessor:
                 # Calculate grand total
                 grand_total_all_suppliers = sum(sheet_overall_monthly_totals)
                 
-                total_all_mo_row = [f"TOTAL ALL {entity_name} PER MO", "-", "-", "-", "-"]
+                total_all_mo_row = [f"TOTAL ALL {entity_name} PER MO"] + ["-"] * (identity_column_count - 1)
                 for total in sheet_overall_monthly_totals:
                     # Store raw numeric values instead of formatted strings
                     numeric_total = total if total > 0 else "-"
@@ -174,7 +189,7 @@ class JSStyleProcessor:
                     if q_idx < len(quarterly_totals_all):
                         quarterly_totals_all[q_idx] += total
                 
-                total_all_quartal_row = [f"TOTAL ALL {entity_name} PER QUARTAL", "-", "-", "-", "-"]
+                total_all_quartal_row = [f"TOTAL ALL {entity_name} PER QUARTAL"] + ["-"] * (identity_column_count - 1)
                 for quarterly_total in quarterly_totals_all:
                     # Store raw numeric values instead of formatted strings
                     numeric_quarterly = quarterly_total if quarterly_total > 0 else "-"
@@ -186,7 +201,8 @@ class JSStyleProcessor:
                     'name': sheet_base_name,
                     'allRowsForSheetContent': all_rows_for_sheet_content,
                     'supplierGroupsMeta': supplier_groups_meta,
-                    'totalColumns': total_columns
+                    'totalColumns': total_columns,
+                    'identityColumnCount': identity_column_count
                 }
                 
                 self.logger.info(f"Sheet processing completed: {len(all_rows_for_sheet_content)} total rows")
@@ -201,8 +217,9 @@ class JSStyleProcessor:
 
     def process_data_like_javascript(self, all_raw_data: List[Dict], period_year: str, 
                                    global_incoterm: str, incoterm_mode: str = "manual",
-                                   output_filename: str = "summary_output.xlsx",
-                                   supplier_as_sheet: str = "tidak") -> str:
+                                    output_filename: str = "summary_output.xlsx",
+                                    supplier_as_sheet: str = "tidak",
+                                    combination_mode: str = "default") -> str:
         """
         Process all data like the JavaScript main function
         
@@ -218,7 +235,7 @@ class JSStyleProcessor:
             str: Path to output file
         """
         try:
-            self.logger.info(f"Starting data processing with {len(all_raw_data)} rows, supplier_as_sheet={supplier_as_sheet}")
+            self.logger.info(f"Starting data processing with {len(all_raw_data)} rows, supplier_as_sheet={supplier_as_sheet}, combination_mode={combination_mode}")
             
             # Discover unique years
             years = set()
@@ -284,7 +301,7 @@ class JSStyleProcessor:
                 self.logger.info("Processing data without importer...")
                 sheet_name_for_blank = "Data_Tanpa_Importer" if supplier_as_sheet == "tidak" else "Data_Tanpa_Supplier"
                 sheet_result = self.process_sheet_data(data_with_blank_or_na_importer, sheet_name_for_blank, 
-                                                     global_incoterm, incoterm_mode, supplier_as_sheet, dynamic_months)
+                                                     global_incoterm, incoterm_mode, supplier_as_sheet, dynamic_months, combination_mode)
                 if sheet_result:
                     workbook_data_for_excel_js.append(sheet_result)
                     self.logger.info("Successfully processed data without importer")
@@ -308,7 +325,7 @@ class JSStyleProcessor:
                         base_sheet_name = base_sheet_name[:30]  # Limit to 30 characters
                         
                         sheet_result = self.process_sheet_data(importer_data, base_sheet_name, 
-                                                              global_incoterm, incoterm_mode, supplier_as_sheet, dynamic_months)
+                                                              global_incoterm, incoterm_mode, supplier_as_sheet, dynamic_months, combination_mode)
                         if sheet_result:
                             workbook_data_for_excel_js.append(sheet_result)
                             self.logger.info(f"Successfully processed {entity_label[:-1]} '{importer}'")
@@ -320,7 +337,7 @@ class JSStyleProcessor:
             # Write output to file
             if workbook_data_for_excel_js:
                 self.logger.info("Writing output to file...")
-                output_file = self.formatter.write_output_to_file(workbook_data_for_excel_js, output_filename, period_year, supplier_as_sheet)
+                output_file = self.formatter.write_output_to_file(workbook_data_for_excel_js, output_filename, period_year, supplier_as_sheet, combination_mode)
                 if output_file and os.path.exists(output_file):
                     self.logger.info(f"Process completed successfully. Output saved to: {output_file}")
                     return output_file

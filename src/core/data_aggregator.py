@@ -25,7 +25,14 @@ class DataAggregator:
         if str(value).strip() == "":
             return ""
         return str(value).strip()
-    def perform_aggregation(self, data: List[Dict[str, Any]]) -> Dict[str, Any]:
+
+    def _get_combination_fields(self, combination_mode: str = "default") -> List[str]:
+        fields = ['hsCode', 'item', 'gsm', 'addOn']
+        if combination_mode == "fiber":
+            fields.extend(['denier', 'length', 'lustre'])
+        return fields
+
+    def perform_aggregation(self, data: List[Dict[str, Any]], combination_mode: str = "default") -> Dict[str, Any]:
         """
         Perform aggregation exactly like the JavaScript version
         
@@ -37,6 +44,7 @@ class DataAggregator:
         """
         try:
             monthly_summary = {}
+            combination_fields = self._get_combination_fields(combination_mode)
             
             self.logger.info(f"    Starting aggregation for {len(data)} rows")
             
@@ -57,24 +65,21 @@ class DataAggregator:
                     self.logger.debug(f"    Skipping row {index}: month='{row.get('month')}', hsCode='{row.get('hsCode')}'")
                     continue
                 
-                # If GSM, ITEM, or ADD ON don't exist (None/undefined), treat as empty string for grouping
-                # If value is string "-", it will be treated as unique "-" value
-                gsm_value = self._safe_string_value(row.get('gsm'))
-                item_value = self._safe_string_value(row.get('item'))
-                add_on_value = self._safe_string_value(row.get('addOn'))
+                field_values = {
+                    field: self._safe_string_value(row.get(field))
+                    for field in combination_fields
+                }
                 
-                key = f"{row['month']}-{row['hsCode']}-{item_value}-{gsm_value}-{add_on_value}"
+                key_parts = [row['month']] + [field_values[field] for field in combination_fields]
+                key = "-".join(key_parts)
                 
                 if key not in monthly_summary:
                     monthly_summary[key] = {
                         'month': row['month'],
-                        'hsCode': self._safe_string_value(row['hsCode']),
-                        'item': item_value,
-                        'gsm': gsm_value,
-                        'addOn': add_on_value,
                         'usdQtyUnits': [],
                         'totalQty': 0
                     }
+                    monthly_summary[key].update(field_values)
                 
                 usd_qty = row.get('usdQtyUnit', 0)  # Fixed field name to match Excel reader
                 qty = row.get('qty', 0)
@@ -105,29 +110,26 @@ class DataAggregator:
             # Create summaryLvl1Data
             summary_lvl1_data = []
             for group in monthly_summary.values():
-                summary_lvl1_data.append({
+                summary_row = {
                     'month': group['month'],
-                    'hsCode': self._safe_string_value(group['hsCode']),
-                    'item': self._safe_string_value(group['item']),
-                    'gsm': self._safe_string_value(group['gsm']),
-                    'addOn': self._safe_string_value(group['addOn']),
                     'avgPrice': average_greater_than_zero(group['usdQtyUnits']),
                     'totalQty': group['totalQty']
-                })
+                }
+                for field in combination_fields:
+                    summary_row[field] = self._safe_string_value(group.get(field))
+                summary_lvl1_data.append(summary_row)
             
             # Create recapSummary
             recap_summary = {}
             for row in summary_lvl1_data:
-                key = f"{row['hsCode']}-{row['item']}-{row['gsm']}-{row['addOn']}"
+                key = "-".join(self._safe_string_value(row.get(field)) for field in combination_fields)
                 if key not in recap_summary:
                     recap_summary[key] = {
-                        'hsCode': self._safe_string_value(row['hsCode']),
-                        'item': self._safe_string_value(row['item']),
-                        'gsm': self._safe_string_value(row['gsm']),
-                        'addOn': self._safe_string_value(row['addOn']),
                         'avgPrices': [],
                         'totalQty': 0
                     }
+                    for field in combination_fields:
+                        recap_summary[key][field] = self._safe_string_value(row.get(field))
                 if row['avgPrice'] and row['avgPrice'] > 0:
                     recap_summary[key]['avgPrices'].append(row['avgPrice'])
                 recap_summary[key]['totalQty'] += row['totalQty']
@@ -135,14 +137,13 @@ class DataAggregator:
             # Create summaryLvl2Data
             summary_lvl2_data = []
             for group in recap_summary.values():
-                summary_lvl2_data.append({
-                    'hsCode': self._safe_string_value(group['hsCode']),
-                    'item': self._safe_string_value(group['item']), 
-                    'gsm': self._safe_string_value(group['gsm']),
-                    'addOn': self._safe_string_value(group['addOn']),
+                summary_row = {
                     'avgOfSummaryPrice': average_greater_than_zero(group['avgPrices']),
                     'totalOfSummaryQty': group['totalQty']
-                })
+                }
+                for field in combination_fields:
+                    summary_row[field] = self._safe_string_value(group.get(field))
+                summary_lvl2_data.append(summary_row)
             
             self.logger.info(f"    Final result: Level1={len(summary_lvl1_data)}, Level2={len(summary_lvl2_data)}")
             

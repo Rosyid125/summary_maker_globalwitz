@@ -235,7 +235,8 @@ class JSStyleExcelReader:
     
     def read_and_preprocess_data(self, input_file_path: str, sheet_name: str = DEFAULT_SHEET_NAME, 
                                date_format: str = 'DD/MM/YYYY', number_format: str = 'EUROPEAN',
-                               column_mapping: Dict[str, str] = None) -> Optional[List[Dict[str, Any]]]:
+                               column_mapping: Dict[str, str] = None,
+                               combination_mode: str = "default") -> Optional[List[Dict[str, Any]]]:
         """
         Read and preprocess Excel data exactly like JavaScript version
         
@@ -298,6 +299,11 @@ class JSStyleExcelReader:
                 if str(value).strip() == "":
                     return "-"
                 return str(value).strip()
+
+            use_fiber_fields = combination_mode == "fiber" or any(
+                column_mapping and column_mapping.get(field)
+                for field in ['denier', 'length', 'lustre']
+            )
             
             # Process each row
             processed_data = []
@@ -331,6 +337,9 @@ class JSStyleExcelReader:
                 item = safe_string_value(get_column_value(row, 'item', ["ITEM"]))
                 add_on = safe_string_value(get_column_value(row, 'add_on', ["ADD ON"]) or
                          get_column_value(row, 'addOn', ["ADD ON"]))
+                denier = safe_string_value(get_column_value(row, 'denier', ["DENIER", "Denier"])) if use_fiber_fields else "-"
+                length = safe_string_value(get_column_value(row, 'length', ["LENGTH", "Length"])) if use_fiber_fields else "-"
+                lustre = safe_string_value(get_column_value(row, 'lustre', ["LUSTRE", "LUSTER", "Lustre", "Luster"])) if use_fiber_fields else "-"
                 importer = safe_string_value(get_column_value(row, 'importer', ["Consignee Name", "IMPORTER", "PURCHASER"]))
                 supplier = safe_string_value(get_column_value(row, 'supplier', ["Shipper Name", "SUPPLIER"]))
                 origin_country = safe_string_value(get_column_value(row, 'origin_country', ["Country of Origin", "ORIGIN COUNTRY"]) or
@@ -366,6 +375,12 @@ class JSStyleExcelReader:
                     'usdQtyUnit': usd_qty_unit,
                     'qty': qty
                 }
+                if use_fiber_fields:
+                    processed_row.update({
+                        'denier': denier,
+                        'length': length,
+                        'lustre': lustre
+                    })
                 
                 processed_data.append(processed_row)
             
