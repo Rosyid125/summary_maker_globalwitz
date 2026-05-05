@@ -1,0 +1,50 @@
+{
+  "default_mappings": {
+    "date": [
+      "date"
+    ],
+    "hs_code": [
+      "hs code"
+    ],
+    "item_description": [
+      "product description"
+    ],
+    "gsm": [
+      "gsm"
+    ],
+    "item": [
+      "item"
+    ],
+    "add_on": [
+      "add_on"
+    ],
+    "denier": [
+      "denier"
+    ],
+    "length": [
+      "length"
+    ],
+    "lustre": [
+      "lustre"
+    ],
+    "importer": [
+      "consignee name",
+      "consignee"
+    ],
+    "supplier": [
+      "shipper name",
+      "shipper"
+    ],
+    "origin_country": [
+      "country of origin"
+    ],
+    "unit_price": [
+      "std. unit rate"
+    ],
+    "quantity": [
+      "std. quantity"
+    ]
+  },
+  "auto_apply_mappings": true,
+  "version": "1.0"
+}

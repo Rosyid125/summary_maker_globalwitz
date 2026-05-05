@@ -16,6 +16,7 @@ from ..core.data_aggregator import DataAggregator
 from ..core.output_formatter import OutputFormatter
 from ..core.js_excel_reader import JSStyleExcelReader
 from ..core.js_processor import JSStyleProcessor
+from ..utils.settings import SettingsManager, get_settings_manager
 
 class MainWindow:
     """Main application window"""
@@ -46,6 +47,13 @@ class MainWindow:
         self.supplier_as_sheet = tk.StringVar(value="tidak")  # "ya" or "tidak"
         self.combination_mode = tk.StringVar(value=self.DEFAULT_COMBINATION_MODE_LABEL)
         self.output_filename = tk.StringVar()
+        
+        # Initialize settings manager
+        self.settings_manager = get_settings_manager()
+        
+        # Settings variables for default mappings
+        self.default_mapping_vars = {}
+        self.auto_apply_mappings = tk.BooleanVar(value=self.settings_manager.get_auto_apply_mappings())
         
         # Column mapping variables
         self.column_mappings = {
@@ -168,9 +176,12 @@ class MainWindow:
     
     def setup_ui(self):
         """Setup the user interface"""
+        # Create header frame for title and settings button
+        self.setup_header_frame()
+        
         # Create main notebook for tabs
         self.notebook = ttk.Notebook(self.root)
-        self.notebook.pack(fill='both', expand=True, padx=10, pady=10)
+        self.notebook.pack(fill='both', expand=True, padx=10, pady=5)
         
         # File Selection Tab
         self.setup_file_tab()
@@ -184,8 +195,147 @@ class MainWindow:
         # Processing Tab
         self.setup_processing_tab()
         
+        # Settings is now a separate dialog, not a tab
+        self.setup_settings_dialog()
+        
         # Set initial tab
         self.notebook.select(0)
+    
+    def setup_header_frame(self):
+        """Setup header frame with title and settings button"""
+        header_frame = ttk.Frame(self.root)
+        header_frame.pack(fill='x', padx=10, pady=(10, 0))
+        
+        # Application title on the left
+        title_label = ttk.Label(
+            header_frame, 
+            text="Excel Summary Maker", 
+            font=('TkDefaultFont', 12, 'bold')
+        )
+        title_label.pack(side='left')
+        
+        # Settings button on the right (gear icon)
+        settings_btn = ttk.Button(
+            header_frame,
+            text="⚙ Settings",
+            command=self.open_settings_dialog,
+            width=12
+        )
+        settings_btn.pack(side='right')
+        
+        self.header_frame = header_frame
+    
+    def open_settings_dialog(self):
+        """Open the settings dialog window"""
+        if hasattr(self, 'settings_dialog') and self.settings_dialog.winfo_exists():
+            # Bring existing window to front
+            self.settings_dialog.lift()
+            self.settings_dialog.focus_force()
+            return
+        
+        # Create new settings dialog
+        self.settings_dialog = tk.Toplevel(self.root)
+        self.settings_dialog.title("Settings - Default Column Mappings")
+        self.settings_dialog.geometry("700x600")
+        self.settings_dialog.transient(self.root)
+        self.settings_dialog.grab_set()
+        
+        # Center the dialog on the main window
+        self.settings_dialog.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (700 // 2)
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (600 // 2)
+        self.settings_dialog.geometry(f"700x600+{x}+{y}")
+        
+        # Build the settings UI inside the dialog
+        self.build_settings_ui(self.settings_dialog)
+    
+    def build_settings_ui(self, parent):
+        """Build the settings UI inside the given parent widget"""
+        # Instructions
+        instruction_text = ("Configure default column mappings. Enter column names from your Excel files "
+                           "(row 1). You can enter multiple names separated by commas for each field. "
+                           "The system will try to auto-map these when loading files.")
+        ttk.Label(parent, text=instruction_text, wraplength=650).pack(pady=10, padx=10)
+        
+        # Auto-apply option
+        auto_apply_frame = ttk.LabelFrame(parent, text="Auto-Apply Settings", padding="10")
+        auto_apply_frame.pack(fill='x', padx=10, pady=5)
+        
+        auto_apply_cb = ttk.Checkbutton(
+            auto_apply_frame, 
+            text="Automatically apply default mappings when loading Excel files",
+            variable=self.auto_apply_mappings,
+            command=self.on_auto_apply_change
+        )
+        auto_apply_cb.pack(anchor='w')
+        
+        ttk.Label(auto_apply_frame, 
+                 text="When enabled, default mappings will be applied automatically when you select a sheet",
+                 font=('TkDefaultFont', 8), foreground='gray').pack(anchor='w', pady=(5, 0))
+        
+        # Create scrollable frame for default mappings
+        mapping_container = ttk.LabelFrame(parent, text="Default Mapping Set", padding="10")
+        mapping_container.pack(fill='both', expand=True, padx=10, pady=5)
+        
+        canvas = tk.Canvas(mapping_container)
+        scrollbar = ttk.Scrollbar(mapping_container, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        self.settings_scrollable_frame = scrollable_frame
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Initialize default mapping variables and create fields
+        self._create_default_mapping_fields()
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Control buttons frame
+        button_frame = ttk.Frame(parent)
+        button_frame.pack(fill='x', padx=10, pady=10)
+        
+        # Left side buttons
+        left_buttons = ttk.Frame(button_frame)
+        left_buttons.pack(side='left')
+        
+        save_btn = ttk.Button(left_buttons, text="Save Settings", command=self.save_default_mappings)
+        save_btn.pack(side='left', padx=(0, 5))
+        
+        load_btn = ttk.Button(left_buttons, text="Load Settings", command=self.load_default_mappings)
+        load_btn.pack(side='left', padx=(0, 5))
+        
+        clear_btn = ttk.Button(left_buttons, text="Clear All", command=self.clear_default_mappings)
+        clear_btn.pack(side='left')
+        
+        # Right side buttons
+        right_buttons = ttk.Frame(button_frame)
+        right_buttons.pack(side='right')
+        
+        export_btn = ttk.Button(right_buttons, text="Export", command=self.export_mappings)
+        export_btn.pack(side='left', padx=(0, 5))
+        
+        import_btn = ttk.Button(right_buttons, text="Import", command=self.import_mappings)
+        import_btn.pack(side='left', padx=(0, 5))
+        
+        close_btn = ttk.Button(right_buttons, text="Close", command=self.close_settings_dialog)
+        close_btn.pack(side='left')
+    
+    def close_settings_dialog(self):
+        """Close the settings dialog"""
+        if hasattr(self, 'settings_dialog') and self.settings_dialog.winfo_exists():
+            self.settings_dialog.destroy()
+    
+    def setup_settings_dialog(self):
+        """Initialize settings dialog data (UI is built when dialog is opened)"""
+        # Initialize default mapping variables
+        self.default_mapping_vars = {}
+        # Settings UI will be built when open_settings_dialog() is called
     
     def setup_file_tab(self):
         """Setup file selection tab"""
@@ -337,6 +487,199 @@ class MainWindow:
         
         # Initialize incoterm mode UI state
         self.on_incoterm_mode_change()
+    
+    def _create_default_mapping_fields(self):
+        """Create input fields for default column mappings"""
+        field_descriptions = {
+            'date': 'Date/Invoice Date',
+            'hs_code': 'HS Code',
+            'item_description': 'Item Description',
+            'gsm': 'GSM (grams per square meter)',
+            'item': 'Item/Product Name',
+            'add_on': 'Add On/Additional Info',
+            'denier': 'Denier',
+            'length': 'Length',
+            'lustre': 'Lustre',
+            'importer': 'Importer Name',
+            'supplier': 'Supplier Name',
+            'origin_country': 'Origin Country',
+            'unit_price': 'Unit Price',
+            'quantity': 'Quantity',
+            'incoterms': 'Incoterms (for auto-read mode)'
+        }
+        
+        # Load existing settings
+        existing_mappings = self.settings_manager.get_default_mappings()
+        
+        for i, (field_key, description) in enumerate(field_descriptions.items()):
+            # Create label
+            ttk.Label(self.settings_scrollable_frame, text=f"{description}:", 
+                     font=('TkDefaultFont', 9, 'bold')).grid(
+                row=i*2, column=0, sticky='w', pady=(10, 2)
+            )
+            
+            # Create entry for multiple column names (comma-separated)
+            var = tk.StringVar()
+            
+            # Pre-populate with existing settings
+            if field_key in existing_mappings:
+                var.set(', '.join(existing_mappings[field_key]))
+            
+            self.default_mapping_vars[field_key] = var
+            
+            entry = ttk.Entry(self.settings_scrollable_frame, textvariable=var, width=60)
+            entry.grid(row=i*2, column=1, sticky='ew', padx=(10, 0), pady=(10, 2))
+            
+            # Help text
+            ttk.Label(self.settings_scrollable_frame, 
+                     text="Enter column names separated by commas",
+                     font=('TkDefaultFont', 8), foreground='gray').grid(
+                row=i*2+1, column=1, sticky='w', padx=(10, 0), pady=(0, 5)
+            )
+        
+        self.settings_scrollable_frame.columnconfigure(1, weight=1)
+    
+    def save_default_mappings(self):
+        """Save default mappings to settings"""
+        try:
+            mappings = {}
+            for field_key, var in self.default_mapping_vars.items():
+                value = var.get().strip()
+                if value:
+                    # Split by comma and clean up
+                    column_names = [name.strip() for name in value.split(',') if name.strip()]
+                    if column_names:
+                        mappings[field_key] = column_names
+            
+            self.settings_manager.set_all_default_mappings(mappings)
+            
+            if self.settings_manager.save_settings():
+                self.log_message("Default mappings saved successfully!")
+                messagebox.showinfo("Success", "Default mappings saved successfully!")
+            else:
+                messagebox.showerror("Error", "Failed to save settings!")
+        except Exception as e:
+            self.logger.error(f"Error saving default mappings: {e}")
+            messagebox.showerror("Error", f"Failed to save settings: {str(e)}")
+    
+    def load_default_mappings(self):
+        """Load default mappings from settings"""
+        try:
+            mappings = self.settings_manager.get_default_mappings()
+            
+            for field_key, var in self.default_mapping_vars.items():
+                if field_key in mappings:
+                    var.set(', '.join(mappings[field_key]))
+                else:
+                    var.set('')
+            
+            self.log_message("Default mappings loaded successfully!")
+            messagebox.showinfo("Success", "Default mappings loaded successfully!")
+        except Exception as e:
+            self.logger.error(f"Error loading default mappings: {e}")
+            messagebox.showerror("Error", f"Failed to load settings: {str(e)}")
+    
+    def clear_default_mappings(self):
+        """Clear all default mappings"""
+        if messagebox.askyesno("Confirm", "Are you sure you want to clear all default mappings?"):
+            for var in self.default_mapping_vars.values():
+                var.set('')
+            self.settings_manager.clear_all_mappings()
+            self.settings_manager.save_settings()
+            self.log_message("Default mappings cleared!")
+            messagebox.showinfo("Success", "Default mappings cleared!")
+    
+    def export_mappings(self):
+        """Export mappings to a JSON file"""
+        try:
+            file_path = filedialog.asksaveasfilename(
+                title="Export Mappings",
+                defaultextension=".json",
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+            )
+            if file_path:
+                # First save current UI values to settings
+                mappings = {}
+                for field_key, var in self.default_mapping_vars.items():
+                    value = var.get().strip()
+                    if value:
+                        column_names = [name.strip() for name in value.split(',') if name.strip()]
+                        if column_names:
+                            mappings[field_key] = column_names
+                
+                self.settings_manager.set_all_default_mappings(mappings)
+                
+                if self.settings_manager.export_mappings(file_path):
+                    self.log_message(f"Mappings exported to: {file_path}")
+                    messagebox.showinfo("Success", f"Mappings exported to:\n{file_path}")
+                else:
+                    messagebox.showerror("Error", "Failed to export mappings!")
+        except Exception as e:
+            self.logger.error(f"Error exporting mappings: {e}")
+            messagebox.showerror("Error", f"Failed to export mappings: {str(e)}")
+    
+    def import_mappings(self):
+        """Import mappings from a JSON file"""
+        try:
+            file_path = filedialog.askopenfilename(
+                title="Import Mappings",
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+            )
+            if file_path:
+                if self.settings_manager.import_mappings(file_path):
+                    # Update UI with imported values
+                    self.load_default_mappings()
+                    self.log_message(f"Mappings imported from: {file_path}")
+                    messagebox.showinfo("Success", f"Mappings imported from:\n{file_path}")
+                else:
+                    messagebox.showerror("Error", "Failed to import mappings!")
+        except Exception as e:
+            self.logger.error(f"Error importing mappings: {e}")
+            messagebox.showerror("Error", f"Failed to import mappings: {str(e)}")
+    
+    def on_auto_apply_change(self):
+        """Handle auto-apply checkbox change"""
+        enabled = self.auto_apply_mappings.get()
+        self.settings_manager.set_auto_apply_mappings(enabled)
+        self.settings_manager.save_settings()
+        status = "enabled" if enabled else "disabled"
+        self.log_message(f"Auto-apply default mappings {status}")
+    
+    def apply_default_mappings_auto(self):
+        """Auto-apply default mappings when loading a sheet (if enabled)"""
+        if not self.auto_apply_mappings.get():
+            return
+        
+        if not self.available_columns:
+            return
+        
+        default_mappings = self.settings_manager.get_default_mappings()
+        if not default_mappings:
+            return
+        
+        mapped_count = 0
+        visible_mapping_keys = set(self.get_visible_mapping_keys())
+        
+        for field_key in visible_mapping_keys:
+            if field_key not in default_mappings:
+                continue
+            
+            # Skip if already mapped
+            if self.column_mappings[field_key].get():
+                continue
+            
+            # Try to find a match
+            matched_column = self.settings_manager.find_matching_column(
+                field_key, 
+                self.available_columns[1:]  # Skip empty option
+            )
+            
+            if matched_column:
+                self.column_mappings[field_key].set(matched_column)
+                mapped_count += 1
+        
+        if mapped_count > 0:
+            self.log_message(f"Auto-applied {mapped_count} default mappings")
     
     def setup_mapping_tab(self):
         """Setup column mapping tab"""
@@ -639,6 +982,9 @@ class MainWindow:
             if hasattr(self, 'mapping_widgets'):
                 for widget in self.mapping_widgets.values():
                     widget['values'] = self.available_columns
+            
+            # Auto-apply default mappings if enabled
+            self.apply_default_mappings_auto()
                     
             self.log_message("Column mappings cleared for new sheet - please remap columns")
         else:
@@ -698,11 +1044,37 @@ class MainWindow:
         self.info_text.insert(tk.END, new_info)
     
     def auto_map_columns(self):
-        """Auto-map columns based on common patterns"""
+        """Auto-map columns based on default mappings first, then fall back to common patterns"""
         if not self.available_columns:
             messagebox.showinfo("Info", "Please select a sheet first!")
             return
         
+        mapped_count = 0
+        default_mapped_count = 0
+        pattern_mapped_count = 0
+        
+        visible_mapping_keys = set(self.get_visible_mapping_keys())
+        
+        # Step 1: Try to match using user-defined default mappings (priority)
+        default_mappings = self.settings_manager.get_default_mappings()
+        
+        for field_key in visible_mapping_keys:
+            if field_key not in default_mappings or not default_mappings[field_key]:
+                continue
+            
+            # Try to find a match using default mappings
+            matched_column = self.settings_manager.find_matching_column(
+                field_key, 
+                self.available_columns[1:]  # Skip empty option
+            )
+            
+            if matched_column:
+                self.column_mappings[field_key].set(matched_column)
+                mapped_count += 1
+                default_mapped_count += 1
+                self.log_message(f"Default mapping: {field_key} -> '{matched_column}'")
+        
+        # Step 2: Fall back to common patterns for unmapped fields
         # Common mapping patterns (more comprehensive)
         mapping_patterns = {
             'date': ['date', 'invoice date', 'shipment date', 'tanggal', 'tgl', 'invoice_date', 'ship_date'],
@@ -721,12 +1093,14 @@ class MainWindow:
             'quantity': ['quantity', 'qty', 'jumlah', 'amount']
         }
         
-        mapped_count = 0
-        
-        visible_mapping_keys = set(self.get_visible_mapping_keys())
         for field_key, patterns in mapping_patterns.items():
             if field_key not in visible_mapping_keys:
                 continue
+            
+            # Skip if already mapped by default mappings
+            if self.column_mappings[field_key].get():
+                continue
+            
             best_match = None
             best_score = 0
             
@@ -743,9 +1117,19 @@ class MainWindow:
             if best_match:
                 self.column_mappings[field_key].set(best_match)
                 mapped_count += 1
+                pattern_mapped_count += 1
         
-        self.log_message(f"Auto-mapped {mapped_count} columns")
-        messagebox.showinfo("Auto Mapping", f"Successfully mapped {mapped_count} columns!")
+        # Log results
+        self.log_message(f"Auto-mapped {mapped_count} columns total")
+        if default_mapped_count > 0:
+            self.log_message(f"  - {default_mapped_count} from user default mappings")
+        if pattern_mapped_count > 0:
+            self.log_message(f"  - {pattern_mapped_count} from common patterns")
+        
+        messagebox.showinfo("Auto Mapping", 
+                          f"Successfully mapped {mapped_count} columns!\n"
+                          f"- {default_mapped_count} from your default mappings\n"
+                          f"- {pattern_mapped_count} from common patterns")
     
     def auto_generate_filename(self):
         """Auto-generate output filename"""

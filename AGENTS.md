@@ -30,6 +30,7 @@ Nama aplikasi: **Excel Summary Maker - GlobalWitz X Volza**.
   - `src/utils/helpers.py`
   - `src/utils/constants.py`
   - `src/utils/logger.py`
+  - `src/utils/settings.py` - Settings manager untuk default column mappings
 
 ### Mode operasi
 - **Development mode**: jalankan `python main.py`.
@@ -108,6 +109,12 @@ File: `src/gui/main_window.py`
 - Configuration
 - Column Mapping
 - Processing
+
+### Settings Dialog (bukan tab, terpisah di pojok kanan atas)
+- Diakses via tombol "⚙ Settings" di header window
+- Berisi Default Mapping Set untuk konfigurasi kolom default
+- Auto-apply option untuk otomatis mapping saat load file
+- Dapat export/import konfigurasi ke file JSON
 
 ### State penting
 - File/sheet: `current_file_path`, `selected_sheet`
