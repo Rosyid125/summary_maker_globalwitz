@@ -17,26 +17,44 @@ class OutputFormatter:
     def __init__(self, logger):
         self.logger = logger
 
-    def _get_combination_fields(self, combination_mode: str = "default") -> List[str]:
-        fields = ['hsCode', 'item', 'gsm', 'addOn']
+    def _get_combination_fields(self, combination_mode: str = "default", custom_fields: List[str] = None) -> List[str]:
         if combination_mode == "fiber":
-            fields.extend(['denier', 'length', 'lustre'])
-        return fields
+            # Fiber mode: gsm + denier + length + lustre (no item, no addOn, no hsCode)
+            return ['gsm', 'denier', 'length', 'lustre']
+        elif combination_mode == "custom" and custom_fields:
+            # Custom mode: use user-selected fields
+            return custom_fields
+        # Default mode: hsCode + item + gsm + addOn
+        return ['hsCode', 'item', 'gsm', 'addOn']
 
-    def _get_identity_headers(self, supplier_as_sheet: str = "tidak", combination_mode: str = "default") -> List[str]:
+    def _get_identity_headers(self, supplier_as_sheet: str = "tidak", combination_mode: str = "default", custom_fields: List[str] = None) -> List[str]:
         group_header = "IMPORTER" if supplier_as_sheet == "ya" else "SUPPLIER"
-        headers = [group_header, "HS CODE", "ITEM", "GSM", "ADD ON"]
+        
         if combination_mode == "fiber":
-            headers.extend(["DENIER", "LENGTH", "LUSTRE"])
-        return headers
+            # Fiber mode: SUPPLIER/IMPORTER + GSM + DENIER + LENGTH + LUSTRE
+            return [group_header, "GSM", "DENIER", "LENGTH", "LUSTRE"]
+        elif combination_mode == "custom" and custom_fields:
+            # Custom mode: build headers from selected fields
+            field_to_header = {
+                'hs_code': "HS CODE",
+                'item': "ITEM",
+                'gsm': "GSM",
+                'add_on': "ADD ON",
+                'denier': "DENIER",
+                'length': "LENGTH",
+                'lustre': "LUSTRE"
+            }
+            return [group_header] + [field_to_header.get(f, f.upper()) for f in custom_fields]
+        # Default mode
+        return [group_header, "HS CODE", "ITEM", "GSM", "ADD ON"]
 
-    def _get_identity_column_count(self, sheet_info: Dict = None, combination_mode: str = "default") -> int:
+    def _get_identity_column_count(self, sheet_info: Dict = None, combination_mode: str = "default", custom_fields: List[str] = None) -> int:
         if sheet_info and sheet_info.get('identityColumnCount'):
             return sheet_info['identityColumnCount']
-        return len(self._get_identity_headers("tidak", combination_mode))
+        return len(self._get_identity_headers("tidak", combination_mode, custom_fields))
 
-    def _combo_matches(self, data_row: Dict, combo: Dict, combination_mode: str = "default") -> bool:
-        return all(data_row.get(field) == combo.get(field) for field in self._get_combination_fields(combination_mode))
+    def _combo_matches(self, data_row: Dict, combo: Dict, combination_mode: str = "default", custom_fields: List[str] = None) -> bool:
+        return all(data_row.get(field) == combo.get(field) for field in self._get_combination_fields(combination_mode, custom_fields))
     
     def extract_incoterm_from_value(self, incoterm_value: str) -> str:
         """Extract first 3 uppercase characters from incoterm value"""
@@ -49,27 +67,29 @@ class OutputFormatter:
         else:
             return "-"
     
-    def get_incoterm_for_combination(self, combo: Dict, raw_data: List[Dict], 
+    def get_incoterm_for_combination(self, combo: Dict, raw_data: List[Dict],
                                    incoterm_mode: str, default_incoterm: str,
-                                   combination_mode: str = "default") -> str:
+                                   combination_mode: str = "default",
+                                   custom_combination_fields: List[str] = None) -> str:
         """Get incoterm value for a specific combination based on mode"""
         if incoterm_mode == "manual":
             return default_incoterm
-        
+
         # For from_column mode, find the first matching row and extract incoterm
         for row in raw_data:
-            if self._combo_matches(row, combo, combination_mode):
-                
+            if self._combo_matches(row, combo, combination_mode, custom_combination_fields):
+
                 incoterm_raw = row.get('incoterms', '')
                 return self.extract_incoterm_from_value(incoterm_raw)
-        
+
         return "-"
     
     def prepare_group_block(self, group_name: str, summary_lvl1_data: List[Dict], 
                           summary_lvl2_data: List[Dict], incoterm_value: str, 
                           incoterm_mode: str = "manual", raw_data: List[Dict] = None,
                           supplier_as_sheet: str = "tidak", dynamic_months: List[str] = None,
-                          combination_mode: str = "default") -> Dict[str, Any]:
+                          combination_mode: str = "default",
+                          custom_combination_fields: List[str] = None) -> Dict[str, Any]:
         if dynamic_months is None:
             from ..utils.constants import MONTH_ORDER
             dynamic_months = list(MONTH_ORDER)
@@ -90,8 +110,8 @@ class OutputFormatter:
         """
         group_block_rows = []
         header_row_count = 2
-        combination_fields = self._get_combination_fields(combination_mode)
-        identity_headers = self._get_identity_headers(supplier_as_sheet, combination_mode)
+        combination_fields = self._get_combination_fields(combination_mode, custom_combination_fields)
+        identity_headers = self._get_identity_headers(supplier_as_sheet, combination_mode, custom_combination_fields)
         identity_column_count = len(identity_headers)
         
         # Create header rows - adjust based on supplier_as_sheet mode
@@ -134,10 +154,10 @@ class OutputFormatter:
             for month_index, month in enumerate(dynamic_months):
                 month_data = None
                 for d in summary_lvl1_data:
-                    if self._combo_matches(d, combo, combination_mode) and d['month'] == month:
+                    if self._combo_matches(d, combo, combination_mode, custom_combination_fields) and d['month'] == month:
                         month_data = d
                         break
-                
+
                 if month_data:
                     # Store raw numeric values instead of formatted strings
                     avg_price = month_data['avgPrice'] if month_data['avgPrice'] else "-"
@@ -146,11 +166,11 @@ class OutputFormatter:
                     monthly_totals[month_index] += month_data['totalQty'] if month_data['totalQty'] else 0
                 else:
                     data_row.extend(["-", "-"])
-            
+
             # Add recap data
             recap_data = None
             for d in summary_lvl2_data:
-                if self._combo_matches(d, combo, combination_mode):
+                if self._combo_matches(d, combo, combination_mode, custom_combination_fields):
                     recap_data = d
                     break
             
@@ -158,7 +178,7 @@ class OutputFormatter:
                 # Store raw numeric values instead of formatted strings
                 avg_price = recap_data['avgOfSummaryPrice'] if recap_data['avgOfSummaryPrice'] else "-"
                 # Get incoterm based on mode
-                combo_incoterm = self.get_incoterm_for_combination(combo, raw_data or [], incoterm_mode, incoterm_value, combination_mode)
+                combo_incoterm = self.get_incoterm_for_combination(combo, raw_data or [], incoterm_mode, incoterm_value, combination_mode, custom_combination_fields)
                 total_qty = recap_data['totalOfSummaryQty'] if recap_data['totalOfSummaryQty'] else "-"
                 data_row.extend([avg_price, combo_incoterm, total_qty])
             else:
@@ -815,29 +835,32 @@ class OutputFormatter:
         else:
             return "-"
     
-    def get_incoterm_for_combination(self, combo: Dict, raw_data: List[Dict], 
+    def get_incoterm_for_combination(self, combo: Dict, raw_data: List[Dict],
                                    incoterm_mode: str, default_incoterm: str,
-                                   combination_mode: str = "default") -> str:
+                                   combination_mode: str = "default",
+                                   custom_combination_fields: List[str] = None) -> str:
         """
         Get incoterm value for a specific combination based on mode
-        
+
         Args:
-            combo: Combination dict with hsCode, item, gsm, addOn
+            combo: Combination dict with fields based on mode
             raw_data: Raw data to search for incoterm
             incoterm_mode: "manual" or "from_column"
             default_incoterm: Default incoterm for manual mode
-            
+            combination_mode: Mode for combination handling
+            custom_combination_fields: Custom fields for custom mode
+
         Returns:
             str: Incoterm value to use
         """
         if incoterm_mode == "manual":
             return default_incoterm
-        
+
         # For from_column mode, find the first matching row and extract incoterm
         for row in raw_data:
-            if self._combo_matches(row, combo, combination_mode):
-                
+            if self._combo_matches(row, combo, combination_mode, custom_combination_fields):
+
                 incoterm_raw = row.get('incoterms', '')
                 return self.extract_incoterm_from_value(incoterm_raw)
-        
+
         return "-"

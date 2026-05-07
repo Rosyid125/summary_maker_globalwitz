@@ -21,7 +21,8 @@ from ..utils.settings import SettingsManager, get_settings_manager
 class MainWindow:
     """Main application window"""
     DEFAULT_COMBINATION_MODE_LABEL = "item + gsm + addon"
-    FIBER_COMBINATION_MODE_LABEL = "item + gsm + addon + denier + length + lustre"
+    FIBER_COMBINATION_MODE_LABEL = "gsm + denier + length + lustre"
+    CUSTOM_COMBINATION_MODE_LABEL = "custom (pilih field sendiri)"
     
     def __init__(self, root, logger):
         self.root = root
@@ -47,6 +48,17 @@ class MainWindow:
         self.supplier_as_sheet = tk.StringVar(value="tidak")  # "ya" or "tidak"
         self.combination_mode = tk.StringVar(value=self.DEFAULT_COMBINATION_MODE_LABEL)
         self.output_filename = tk.StringVar()
+        
+        # Custom combination field selection variables
+        self.custom_combination_fields = {
+            'hs_code': tk.BooleanVar(value=True),
+            'item': tk.BooleanVar(value=True),
+            'gsm': tk.BooleanVar(value=True),
+            'add_on': tk.BooleanVar(value=True),
+            'denier': tk.BooleanVar(value=False),
+            'length': tk.BooleanVar(value=False),
+            'lustre': tk.BooleanVar(value=False)
+        }
         
         # Initialize settings manager
         self.settings_manager = get_settings_manager()
@@ -82,7 +94,11 @@ class MainWindow:
     def get_combination_mode_value(self):
         """Return normalized combination mode for processing."""
         mode = self.combination_mode.get()
-        return "fiber" if mode == self.FIBER_COMBINATION_MODE_LABEL else "default"
+        if mode == self.FIBER_COMBINATION_MODE_LABEL:
+            return "fiber"
+        elif mode == self.CUSTOM_COMBINATION_MODE_LABEL:
+            return "custom"
+        return "default"
 
     def get_visible_mapping_keys(self):
         """Return mapping keys shown for the selected combination mode."""
@@ -90,10 +106,44 @@ class MainWindow:
             'date', 'hs_code', 'item_description', 'gsm', 'item', 'add_on',
             'importer', 'supplier', 'origin_country', 'unit_price', 'quantity', 'incoterms'
         ]
-        if self.get_combination_mode_value() == "fiber":
+        mode = self.get_combination_mode_value()
+        if mode == "fiber":
+            # Fiber mode: show denier, length, lustre after add_on
             insert_at = visible_keys.index('add_on') + 1
             visible_keys[insert_at:insert_at] = ['denier', 'length', 'lustre']
+        elif mode == "custom":
+            # Custom mode: only show checked fields
+            checked_fields = []
+            field_mapping = {
+                'hs_code': 'hs_code',
+                'item': 'item',
+                'gsm': 'gsm',
+                'add_on': 'add_on',
+                'denier': 'denier',
+                'length': 'length',
+                'lustre': 'lustre'
+            }
+            for field, mapping_key in field_mapping.items():
+                if self.custom_combination_fields[field].get():
+                    checked_fields.append(mapping_key)
+            
+            # Insert checked fields after add_on
+            insert_at = visible_keys.index('add_on') + 1
+            # Only add fields that are checked and not already in visible_keys
+            fields_to_add = [f for f in checked_fields if f not in visible_keys]
+            visible_keys[insert_at:insert_at] = fields_to_add
         return visible_keys
+    
+    def get_selected_combination_fields(self):
+        """Return list of selected fields for custom combination mode."""
+        if self.get_combination_mode_value() != "custom":
+            return None
+        selected = []
+        field_order = ['hs_code', 'item', 'gsm', 'add_on', 'denier', 'length', 'lustre']
+        for field in field_order:
+            if self.custom_combination_fields[field].get():
+                selected.append(field)
+        return selected if selected else ['hs_code']  # Minimal 1 field
     
     def on_incoterm_mode_change(self, event=None):
         """Handle incoterm mode change to update UI visibility"""
@@ -136,11 +186,34 @@ class MainWindow:
     def on_combination_mode_change(self, event=None):
         """Handle combination mode change and rebuild mapping controls."""
         mode_value = self.get_combination_mode_value()
+        
+        # Show/hide custom combination field selector
+        if mode_value == "custom":
+            self.custom_combination_frame.grid()
+            # Check all fields by default when custom mode is selected
+            for var in self.custom_combination_fields.values():
+                var.set(True)
+        else:
+            self.custom_combination_frame.grid_remove()
+        
+        # Rebuild column mapping fields based on new mode
         self.rebuild_column_mapping_fields()
+        
         if mode_value == "fiber":
-            self.log_message("Combination Mode: fiber - Denier, Length, and Lustre are included in combinations")
+            self.log_message("Combination Mode: fiber - GSM, Denier, Length, and Lustre are used for combinations")
+        elif mode_value == "custom":
+            self.log_message("Combination Mode: custom - User can select which fields to combine")
         else:
             self.log_message("Combination Mode: default - Item, GSM, and Add On are used for combinations")
+    
+    def on_custom_field_changed(self):
+        """Handle custom field checkbox change - rebuild column mapping to show only checked fields."""
+        # Only rebuild if in custom mode
+        if self.get_combination_mode_value() == "custom":
+            self.rebuild_column_mapping_fields()
+            # Log which fields are selected
+            selected = [k for k, v in self.custom_combination_fields.items() if v.get()]
+            self.log_message(f"Custom fields selected: {', '.join(selected)}")
 
     def rebuild_column_mapping_fields(self):
         """Rebuild visible mapping widgets while preserving StringVar values."""
@@ -460,18 +533,44 @@ class MainWindow:
         auto_btn = ttk.Button(other_section, text="Auto Generate", command=self.auto_generate_filename)
         auto_btn.grid(row=3, column=3, padx=(10, 0), pady=2)
         
-        # Supplier as sheet option
+        # Combination mode option
         ttk.Label(other_section, text="COMBINATION MODE:").grid(row=4, column=0, sticky='w', pady=2)
         self.combination_mode_combo = ttk.Combobox(other_section, textvariable=self.combination_mode,
-                                                  values=[self.DEFAULT_COMBINATION_MODE_LABEL, self.FIBER_COMBINATION_MODE_LABEL],
+                                                  values=[self.DEFAULT_COMBINATION_MODE_LABEL, self.FIBER_COMBINATION_MODE_LABEL, self.CUSTOM_COMBINATION_MODE_LABEL],
                                                   state="readonly", width=45)
         self.combination_mode_combo.grid(row=4, column=1, columnspan=2, sticky='w', padx=(10, 0), pady=2)
         self.combination_mode_combo.bind('<<ComboboxSelected>>', self.on_combination_mode_change)
+        
+        # Custom combination field selector (initially hidden)
+        self.custom_combination_frame = ttk.LabelFrame(other_section, text="Custom Combination Fields", padding="5")
+        self.custom_combination_frame.grid(row=5, column=0, columnspan=4, sticky='ew', padx=(10, 0), pady=5)
+        self.custom_combination_frame.grid_remove()  # Hide initially
+        
+        # Checkboxes for custom fields with callback to rebuild mapping
+        custom_fields_row1 = ttk.Frame(self.custom_combination_frame)
+        custom_fields_row1.pack(fill='x', pady=2)
+        ttk.Checkbutton(custom_fields_row1, text="HS Code", variable=self.custom_combination_fields['hs_code'], 
+                       command=self.on_custom_field_changed).pack(side='left', padx=(0, 15))
+        ttk.Checkbutton(custom_fields_row1, text="Item", variable=self.custom_combination_fields['item'],
+                       command=self.on_custom_field_changed).pack(side='left', padx=(0, 15))
+        ttk.Checkbutton(custom_fields_row1, text="GSM", variable=self.custom_combination_fields['gsm'],
+                       command=self.on_custom_field_changed).pack(side='left', padx=(0, 15))
+        ttk.Checkbutton(custom_fields_row1, text="Add On", variable=self.custom_combination_fields['add_on'],
+                       command=self.on_custom_field_changed).pack(side='left', padx=(0, 15))
+        
+        custom_fields_row2 = ttk.Frame(self.custom_combination_frame)
+        custom_fields_row2.pack(fill='x', pady=2)
+        ttk.Checkbutton(custom_fields_row2, text="Denier", variable=self.custom_combination_fields['denier'],
+                       command=self.on_custom_field_changed).pack(side='left', padx=(0, 15))
+        ttk.Checkbutton(custom_fields_row2, text="Length", variable=self.custom_combination_fields['length'],
+                       command=self.on_custom_field_changed).pack(side='left', padx=(0, 15))
+        ttk.Checkbutton(custom_fields_row2, text="Lustre", variable=self.custom_combination_fields['lustre'],
+                       command=self.on_custom_field_changed).pack(side='left', padx=(0, 15))
 
-        ttk.Label(other_section, text="Supplier sebagai Sheet:").grid(row=5, column=0, sticky='w', pady=2)
+        ttk.Label(other_section, text="Supplier sebagai Sheet:").grid(row=6, column=0, sticky='w', pady=2)
         
         supplier_frame = ttk.Frame(other_section)
-        supplier_frame.grid(row=5, column=1, columnspan=2, sticky='w', padx=(10, 0), pady=2)
+        supplier_frame.grid(row=6, column=1, columnspan=2, sticky='w', padx=(10, 0), pady=2)
         
         supplier_ya_radio = ttk.Radiobutton(supplier_frame, text="Ya", variable=self.supplier_as_sheet, value="ya", command=self.on_supplier_as_sheet_change)
         supplier_ya_radio.pack(side='left')
@@ -481,7 +580,7 @@ class MainWindow:
         # Info label for supplier as sheet option
         supplier_info_label = ttk.Label(other_section, text="Pilih Ya jika Anda membalikkan Supplier dan Importer", 
                                        font=('TkDefaultFont', 8), foreground='gray')
-        supplier_info_label.grid(row=6, column=1, columnspan=2, sticky='w', padx=(10, 0), pady=2)
+        supplier_info_label.grid(row=7, column=1, columnspan=2, sticky='w', padx=(10, 0), pady=2)
         
         other_section.columnconfigure(1, weight=1)
         
@@ -1199,6 +1298,12 @@ class MainWindow:
             column_mapping = {key: self.column_mappings[key].get() for key in visible_mapping_keys if self.column_mappings[key].get()}
             combination_mode = self.get_combination_mode_value()
             
+            # Get custom combination fields if in custom mode
+            custom_combination_fields = None
+            if combination_mode == "custom":
+                custom_combination_fields = self.get_selected_combination_fields()
+                self.logger.info(f"Custom combination fields: {custom_combination_fields}")
+            
             # Read data using JavaScript-style reader
             all_raw_data = self.js_excel_reader.read_and_preprocess_data(
                 self.current_file_path.get(),
@@ -1256,7 +1361,8 @@ class MainWindow:
                     incoterm_mode,
                     output_filename,
                     supplier_as_sheet_mode,
-                    combination_mode
+                    combination_mode,
+                    custom_combination_fields
                 )
                 
                 if not output_path:

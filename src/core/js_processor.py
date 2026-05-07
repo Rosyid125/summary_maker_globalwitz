@@ -21,22 +21,31 @@ class JSStyleProcessor:
         self.aggregator = DataAggregator(logger)
         self.formatter = OutputFormatter(logger)
 
-    def _get_combination_fields(self, combination_mode: str = "default") -> List[str]:
-        fields = ['hsCode', 'item', 'gsm', 'addOn']
+    def _get_combination_fields(self, combination_mode: str = "default", custom_fields: List[str] = None) -> List[str]:
         if combination_mode == "fiber":
-            fields.extend(['denier', 'length', 'lustre'])
-        return fields
+            # Fiber mode: gsm + denier + length + lustre (no item, no addOn)
+            return ['gsm', 'denier', 'length', 'lustre']
+        elif combination_mode == "custom" and custom_fields:
+            # Custom mode: use user-selected fields
+            return custom_fields
+        # Default mode: hsCode + item + gsm + addOn
+        return ['hsCode', 'item', 'gsm', 'addOn']
 
-    def _get_total_per_item_fields(self, combination_mode: str = "default") -> List[str]:
-        fields = ['item', 'gsm', 'addOn']
+    def _get_total_per_item_fields(self, combination_mode: str = "default", custom_fields: List[str] = None) -> List[str]:
         if combination_mode == "fiber":
-            fields.extend(['denier', 'length', 'lustre'])
-        return fields
+            # Fiber mode: gsm + denier + length + lustre
+            return ['gsm', 'denier', 'length', 'lustre']
+        elif combination_mode == "custom" and custom_fields:
+            # Custom mode: use user-selected fields (excluding hs_code for item summary)
+            return [f for f in custom_fields if f != 'hs_code']
+        # Default mode: item + gsm + addOn
+        return ['item', 'gsm', 'addOn']
     
     def process_sheet_data(self, data_to_process: List[Dict], sheet_base_name: str, 
                           incoterm_value: str, incoterm_mode: str = "manual", 
                           supplier_as_sheet: str = "tidak", dynamic_months: List[str] = None,
-                          combination_mode: str = "default") -> Optional[Dict[str, Any]]:
+                          combination_mode: str = "default", 
+                          custom_combination_fields: List[str] = None) -> Optional[Dict[str, Any]]:
         if dynamic_months is None:
             from ..utils.constants import MONTH_ORDER
             dynamic_months = list(MONTH_ORDER)
@@ -76,8 +85,8 @@ class JSStyleProcessor:
             supplier_groups_meta = []
             sheet_overall_monthly_totals = [0] * len(dynamic_months)
             item_summary_data_for_sheet = {}
-            combination_fields = self._get_combination_fields(combination_mode)
-            item_summary_fields = self._get_total_per_item_fields(combination_mode)
+            combination_fields = self._get_combination_fields(combination_mode, custom_combination_fields)
+            item_summary_fields = self._get_total_per_item_fields(combination_mode, custom_combination_fields)
             identity_column_count = 1 + len(combination_fields)
             
             total_columns = identity_column_count + len(dynamic_months) * 2 + 3
@@ -89,7 +98,7 @@ class JSStyleProcessor:
                 group_data = grouped_by_supplier_or_origin[group_name]
                 
                 # Perform aggregation
-                aggregation_result = self.aggregator.perform_aggregation(group_data, combination_mode)
+                aggregation_result = self.aggregator.perform_aggregation(group_data, combination_mode, custom_combination_fields)
                 summary_lvl1 = aggregation_result['summaryLvl1']
                 summary_lvl2 = aggregation_result['summaryLvl2']
                 
@@ -98,7 +107,7 @@ class JSStyleProcessor:
                 if summary_lvl2:
                     # Prepare group block
                     group_block = self.formatter.prepare_group_block(group_name, summary_lvl1, summary_lvl2, 
-                                                                   incoterm_value, incoterm_mode, group_data, supplier_as_sheet, dynamic_months, combination_mode)
+                                                                   incoterm_value, incoterm_mode, group_data, supplier_as_sheet, dynamic_months, combination_mode, custom_combination_fields)
                     
                     all_rows_for_sheet_content.extend(group_block['groupBlockRows'])
                     
@@ -219,7 +228,8 @@ class JSStyleProcessor:
                                    global_incoterm: str, incoterm_mode: str = "manual",
                                     output_filename: str = "summary_output.xlsx",
                                     supplier_as_sheet: str = "tidak",
-                                    combination_mode: str = "default") -> str:
+                                    combination_mode: str = "default",
+                                    custom_combination_fields: List[str] = None) -> str:
         """
         Process all data like the JavaScript main function
         
@@ -301,7 +311,7 @@ class JSStyleProcessor:
                 self.logger.info("Processing data without importer...")
                 sheet_name_for_blank = "Data_Tanpa_Importer" if supplier_as_sheet == "tidak" else "Data_Tanpa_Supplier"
                 sheet_result = self.process_sheet_data(data_with_blank_or_na_importer, sheet_name_for_blank, 
-                                                     global_incoterm, incoterm_mode, supplier_as_sheet, dynamic_months, combination_mode)
+                                                     global_incoterm, incoterm_mode, supplier_as_sheet, dynamic_months, combination_mode, custom_combination_fields)
                 if sheet_result:
                     workbook_data_for_excel_js.append(sheet_result)
                     self.logger.info("Successfully processed data without importer")
@@ -325,7 +335,7 @@ class JSStyleProcessor:
                         base_sheet_name = base_sheet_name[:30]  # Limit to 30 characters
                         
                         sheet_result = self.process_sheet_data(importer_data, base_sheet_name, 
-                                                              global_incoterm, incoterm_mode, supplier_as_sheet, dynamic_months, combination_mode)
+                                                              global_incoterm, incoterm_mode, supplier_as_sheet, dynamic_months, combination_mode, custom_combination_fields)
                         if sheet_result:
                             workbook_data_for_excel_js.append(sheet_result)
                             self.logger.info(f"Successfully processed {entity_label[:-1]} '{importer}'")

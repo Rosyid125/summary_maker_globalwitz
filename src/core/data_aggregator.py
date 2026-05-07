@@ -26,13 +26,17 @@ class DataAggregator:
             return ""
         return str(value).strip()
 
-    def _get_combination_fields(self, combination_mode: str = "default") -> List[str]:
-        fields = ['hsCode', 'item', 'gsm', 'addOn']
+    def _get_combination_fields(self, combination_mode: str = "default", custom_fields: List[str] = None) -> List[str]:
         if combination_mode == "fiber":
-            fields.extend(['denier', 'length', 'lustre'])
-        return fields
+            # Fiber mode: gsm + denier + length + lustre (no item, no addOn, no hsCode)
+            return ['gsm', 'denier', 'length', 'lustre']
+        elif combination_mode == "custom" and custom_fields:
+            # Custom mode: use user-selected fields
+            return custom_fields
+        # Default mode: hsCode + item + gsm + addOn
+        return ['hsCode', 'item', 'gsm', 'addOn']
 
-    def perform_aggregation(self, data: List[Dict[str, Any]], combination_mode: str = "default") -> Dict[str, Any]:
+    def perform_aggregation(self, data: List[Dict[str, Any]], combination_mode: str = "default", custom_combination_fields: List[str] = None) -> Dict[str, Any]:
         """
         Perform aggregation exactly like the JavaScript version
         
@@ -44,7 +48,7 @@ class DataAggregator:
         """
         try:
             monthly_summary = {}
-            combination_fields = self._get_combination_fields(combination_mode)
+            combination_fields = self._get_combination_fields(combination_mode, custom_combination_fields)
             
             self.logger.info(f"    Starting aggregation for {len(data)} rows")
             
